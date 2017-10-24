@@ -1,0 +1,27 @@
+{
+  "name": "naf-janus-adapter",
+  "version": "0.1.0",
+  "description": "networked-aframe Janus network adapter",
+  "main": "dist/naf-janus-adapter.js",
+  "license": "MPL-2.0",
+  "devDependencies": {
+    "babel-core": "^6.26.0",
+    "babel-loader": "^7.1.2",
+    "babel-minify-webpack-plugin": "^0.2.0",
+    "babel-preset-flow": "^6.23.0",
+    "babel-preset-stage-3": "^6.24.1",
+    "webpack": "^3.8.1",
+    "webpack-dev-server": "^2.9.3",
+    "webpack-merge": "^4.1.0"
+  },
+  "dependencies": {
+    "minijanus": "^0.1.2"
+  },
+  "scripts": {
+    "start": "webpack-dev-server --open --config webpack.dev.js",
+    "build": "npm run build:dev && npm run build:prod",
+    "build:dev": "webpack --config webpack.dev.js",
+    "build:prod": "webpack --config webpack.prod.js",
+    "prepublish": "npm run build"
+  }
+}
