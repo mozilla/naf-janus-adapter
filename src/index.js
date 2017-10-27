@@ -102,9 +102,6 @@ class JanusAdapter {
     var publisher = await this.createPublisher();
     this.publisher = publisher;
 
-    // Wait for the reliable datachannel to be open before we start sending messages on it.
-    await waitForEvent(publisher.reliableChannel, "open");
-
     this.connectSuccess(this.userId);
 
     // Add all of the initial occupants.
@@ -121,9 +118,6 @@ class JanusAdapter {
 
     // Handle all of the join and leave events from the publisher.
     if (
-      this.publisher &&
-      message.sender &&
-      message.sender === this.publisher.handle.id &&
       message.plugindata &&
       message.plugindata.data
     ) {
@@ -189,6 +183,9 @@ class JanusAdapter {
 
     var answer = await handle.sendJsep(offer);
     await peerConnection.setRemoteDescription(answer.jsep);
+
+    // Wait for the reliable datachannel to be open before we start sending messages on it.
+    await waitForEvent(reliableChannel, "open");    
 
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
     var message = await this.sendJoin(handle, this.room, this.userId, true);
@@ -276,7 +273,7 @@ class JanusAdapter {
     }
   }
 
-  getAudioStream(clientId) {
+  getMediaStream(clientId) {
     var subscriber = this.occupantSubscribers[clientId];
 
     if (!subscriber) {

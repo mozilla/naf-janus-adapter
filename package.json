@@ -15,7 +15,7 @@
     "webpack-merge": "^4.1.0"
   },
   "dependencies": {
-    "minijanus": "^0.1.2"
+    "minijanus": "^0.1.4"
   },
   "scripts": {
     "start": "webpack-dev-server --open --config webpack.dev.js",
