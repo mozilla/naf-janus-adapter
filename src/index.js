@@ -48,7 +48,7 @@ class JanusAdapter {
 
     this.publisher = null;
     this.occupants = {};
-    this.occupantSubscribers = {};
+    this.occupantPromises = {};
 
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
@@ -99,15 +99,16 @@ class JanusAdapter {
     // Attach the SFU Plugin and create a RTCPeerConnection for the publisher.
     // The publisher sends audio and opens two bidirectional data channels.
     // One reliable datachannel and one unreliable.
-    var publisher = await this.createPublisher();
-    this.publisher = publisher;
+    var publisherPromise = this.createPublisher();
+    this.occupantPromises[this.userId] = publisherPromise;
+    this.publisher = await publisherPromise;
 
     this.connectSuccess(this.userId);
 
     // Add all of the initial occupants.
-    for (let occupantId of publisher.initialOccupants) {
-      if (occupantId !== publisher.userId) {
-        this.occupantSubscribers[occupantId] = this.addOccupant(occupantId);
+    for (let occupantId of this.publisher.initialOccupants) {
+      if (occupantId !== this.userId) {
+        this.occupantPromises[occupantId] = this.addOccupant(occupantId);
       }
     }
   }
@@ -117,14 +118,11 @@ class JanusAdapter {
     this.session.receive(message);
 
     // Handle all of the join and leave events from the publisher.
-    if (
-      message.plugindata &&
-      message.plugindata.data
-    ) {
+    if (message.plugindata && message.plugindata.data) {
       var data = message.plugindata.data;
 
       if (data.event === "join") {
-        this.occupantSubscribers[data.user_id] = this.addOccupant(data.user_id);
+        this.occupantPromises[data.user_id] = this.addOccupant(data.user_id);
       } else if (data.event && data.event === "leave") {
         this.removeOccupant(data.user_id);
       }
@@ -185,7 +183,7 @@ class JanusAdapter {
     await peerConnection.setRemoteDescription(answer.jsep);
 
     // Wait for the reliable datachannel to be open before we start sending messages on it.
-    await waitForEvent(reliableChannel, "open");    
+    await waitForEvent(reliableChannel, "open");
 
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
     var message = await this.sendJoin(handle, this.room, this.userId, true);
@@ -274,13 +272,13 @@ class JanusAdapter {
   }
 
   getMediaStream(clientId) {
-    var subscriber = this.occupantSubscribers[clientId];
+    var occupantPromise = this.occupantPromises[clientId];
 
-    if (!subscriber) {
+    if (!occupantPromise) {
       throw new Error(`Subscriber for client: ${clientId} does not exist.`);
     }
 
-    return subscriber.then(s => s.mediaStream);
+    return occupantPromise.then(s => s.mediaStream);
   }
 
   enableMicrophone(enabled) {
