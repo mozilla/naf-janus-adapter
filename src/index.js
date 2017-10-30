@@ -282,10 +282,8 @@ class JanusAdapter {
   }
 
   enableMicrophone(enabled) {
-    var microphoneStream = this.subscriber.mediaStream;
-
-    if (microphoneStream) {
-      var audioTracks = microphoneStream.getAudioTracks();
+    if (this.publisher && this.publisher.mediaStream) {
+      var audioTracks = this.publisher.mediaStream.getAudioTracks();
 
       if (audioTracks.length > 0) {
         audioTracks[0].enabled = enabled;
