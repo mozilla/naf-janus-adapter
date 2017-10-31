@@ -43,6 +43,7 @@ class JanusAdapter {
     this.userId = randomUint();
 
     this.serverUrl = null;
+    this.webRtcOptions = {};
     this.ws = null;
     this.session = null;
 
@@ -68,7 +69,9 @@ class JanusAdapter {
     }
   }
 
-  setWebRtcOptions(options) {}
+  setWebRtcOptions(options) {
+    this.webRtcOptions = options;
+  }
 
   setServerConnectListeners(successListener, failureListener) {
     this.connectSuccess = successListener;
@@ -170,10 +173,13 @@ class JanusAdapter {
     });
     reliableChannel.addEventListener("message", this.onDataChannelMessage);
 
-    var mediaStream = await getMicrophone();
+    var mediaStream;
+    if (this.webRtcOptions.audio) {
+      mediaStream = await getMicrophone();
 
-    if (mediaStream) {
-      peerConnection.addStream(mediaStream);
+      if (mediaStream) {
+        peerConnection.addStream(mediaStream);
+      }
     }
 
     var offer = await peerConnection.createOffer();
@@ -275,7 +281,9 @@ class JanusAdapter {
     var occupantPromise = this.occupantPromises[clientId];
 
     if (!occupantPromise) {
-      throw new Error(`Subscriber for client: ${clientId} does not exist.`);
+      return Promise.reject(
+        new Error(`Subscriber for client: ${clientId} does not exist.`)
+      );
     }
 
     return occupantPromise.then(s => s.mediaStream);
