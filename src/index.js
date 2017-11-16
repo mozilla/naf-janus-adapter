@@ -192,9 +192,9 @@ class JanusAdapter {
     await waitForEvent(reliableChannel, "open");
 
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
-    var message = await this.sendJoin(handle, this.room, this.userId, true);
+    var message = await this.sendJoin(handle, this.room, this.userId, {notifications: true, data: true});
 
-    var initialOccupants = message.plugindata.data.response.user_ids;
+    var initialOccupants = message.plugindata.data.response.users[this.room];
 
     return {
       handle,
@@ -225,12 +225,7 @@ class JanusAdapter {
     await peerConnection.setRemoteDescription(answer.jsep);
 
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's audio stream.
-    await this.sendJoin(handle, this.room, this.userId, false, [
-      {
-        publisher_id: occupantId,
-        content_kind: ContentKind.Audio
-      }
-    ]);
+    await this.sendJoin(handle, this.room, this.userId, { notifications: false, media: occupantId });
 
     // Get the occupant's audio stream.
     var streams = peerConnection.getRemoteStreams();
@@ -243,13 +238,12 @@ class JanusAdapter {
     };
   }
 
-  sendJoin(handle, roomId, userId, notify, specs) {
+  sendJoin(handle, roomId, userId, subscribe) {
     return handle.sendMessage({
       kind: "join",
       room_id: roomId,
       user_id: userId,
-      notify,
-      subscription_specs: specs
+      subscribe
     });
   }
 
