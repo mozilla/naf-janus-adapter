@@ -1,9 +1,9 @@
 var mj = require("minijanus");
 
 const ContentKind = {
-  Audio: 1,
-  Video: 2,
-  Data: 4
+  Audio: "audio",
+  Video: "video",
+  All: "all"
 };
 
 function randomUint() {
@@ -16,24 +16,10 @@ function waitForEvent(target, event) {
   });
 }
 
-async function getMicrophone() {
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: true
-    });
-  } catch (e) {
-    if (e.name === "NotAllowedError") {
-      console.warn("Microphone access not allowed.");
-    } else {
-      console.error(e);
-    }
-  }
-}
-
 const PEER_CONNECTION_CONFIG = {
   iceServers: [
-    { url: "stun:stun1.l.google.com:19302" },
-    { url: "stun:stun2.l.google.com:19302" }
+    { urls: ["stun:stun1.l.google.com:19302"] },
+    { urls: ["stun:stun2.l.google.com:19302"] }
   ]
 };
 
@@ -174,12 +160,10 @@ class JanusAdapter {
     reliableChannel.addEventListener("message", this.onDataChannelMessage);
 
     var mediaStream;
-    if (this.webRtcOptions.audio) {
-      mediaStream = await getMicrophone();
-
-      if (mediaStream) {
-        peerConnection.addStream(mediaStream);
-      }
+    // @TODO either this should wait or setLocalMediaStream should renegotiate (or both)
+    if (this.localMediaStream) {
+      mediaStream = this.localMediaStream;
+      peerConnection.addStream(this.localMediaStream);
     }
 
     var offer = await peerConnection.createOffer();
@@ -217,7 +201,8 @@ class JanusAdapter {
     });
 
     var offer = await peerConnection.createOffer({
-      offerToReceiveAudio: true
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true
     });
 
     await peerConnection.setLocalDescription(offer);
@@ -228,7 +213,7 @@ class JanusAdapter {
     await this.sendJoin(handle, this.room, this.userId, false, [
       {
         publisher_id: occupantId,
-        content_kind: ContentKind.Audio
+        content_kind: ContentKind.All
       }
     ]);
 
@@ -287,6 +272,11 @@ class JanusAdapter {
     }
 
     return occupantPromise.then(s => s.mediaStream);
+  }
+
+  setLocalMediaStream(stream) {
+    // @TODO this should handle renegotiating the publisher connection if it has already been made
+    this.localMediaStream = stream;
   }
 
   enableMicrophone(enabled) {
