@@ -17,6 +17,9 @@
   "dependencies": {
     "minijanus": "^0.1.6"
   },
+  "resolutions": {
+    "webpack-sources": "1.0.1"
+  },
   "scripts": {
     "start": "webpack-dev-server --open --config webpack.dev.js",
     "build": "npm run build:dev && npm run build:prod",
