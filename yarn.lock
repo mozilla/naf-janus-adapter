@@ -2219,9 +2219,9 @@ mimic-fn@^1.0.0:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/mimic-fn/-/mimic-fn-1.1.0.tgz#e667783d92e89dbd342818b5230b9d62a672ad18"
 
-minijanus@^0.1.4:
-  version "0.1.4"
-  resolved "https://registry.yarnpkg.com/minijanus/-/minijanus-0.1.4.tgz#1a8294fa0735ce6a6c58a10dcff9a9ab0cfe8132"
+minijanus@^0.1.6:
+  version "0.1.6"
+  resolved "https://registry.yarnpkg.com/minijanus/-/minijanus-0.1.6.tgz#8aa08d5797239b3c54a998efa0ee25fa4a700689"
 
 minimalistic-assert@^1.0.0:
   version "1.0.0"
