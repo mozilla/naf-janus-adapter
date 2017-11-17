@@ -1,6 +1,6 @@
 {
   "name": "naf-janus-adapter",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "networked-aframe Janus network adapter",
   "main": "src/index.js",
   "license": "MPL-2.0",
