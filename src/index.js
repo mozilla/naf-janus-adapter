@@ -1,11 +1,5 @@
 var mj = require("minijanus");
 
-const ContentKind = {
-  Audio: "audio",
-  Video: "video",
-  All: "all"
-};
-
 function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 }
@@ -165,6 +159,9 @@ class JanusAdapter {
       mediaStream = this.localMediaStream;
       peerConnection.addStream(this.localMediaStream);
     }
+    else {
+      console.warn("localMediaStream not set. Will not publish audio or video");
+    }
 
     var offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
@@ -269,6 +266,9 @@ class JanusAdapter {
   }
 
   setLocalMediaStream(stream) {
+    if (this.publisher) {
+      console.warn("setLocalMediaStream called after publisher created. Will not publish new stream.");
+    }
     // @TODO this should handle renegotiating the publisher connection if it has already been made
     this.localMediaStream = stream;
   }
