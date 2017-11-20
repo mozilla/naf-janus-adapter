@@ -197,17 +197,13 @@ class JanusAdapter {
       handle.sendTrickle(event.candidate);
     });
 
-    var offer = await peerConnection.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true
-    });
-
-    await peerConnection.setLocalDescription(offer);
-    var answer = await handle.sendJsep(offer);
-    await peerConnection.setRemoteDescription(answer.jsep);
-
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's audio stream.
-    await this.sendJoin(handle, this.room, this.userId, { notifications: false, media: occupantId });
+    const resp = await this.sendJoin(handle, this.room, this.userId, { notifications: false, media: occupantId });
+
+    await peerConnection.setRemoteDescription(resp.jsep);
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    await handle.sendJsep(peerConnection.localDescription);
 
     // Get the occupant's audio stream.
     var streams = peerConnection.getRemoteStreams();
