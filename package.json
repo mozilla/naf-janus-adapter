@@ -15,6 +15,7 @@
     "webpack-merge": "^4.1.0"
   },
   "dependencies": {
+    "debug": "^3.1.0",
     "minijanus": "^0.1.6"
   },
   "resolutions": {
