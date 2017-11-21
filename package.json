@@ -2,7 +2,7 @@
   "name": "naf-janus-adapter",
   "version": "0.1.5",
   "description": "networked-aframe Janus network adapter",
-  "main": "dist/naf-janus-adapter.js",
+  "main": "src/index.js",
   "license": "MPL-2.0",
   "devDependencies": {
     "babel-core": "^6.26.0",
