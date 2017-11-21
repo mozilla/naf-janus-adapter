@@ -1,4 +1,5 @@
 var mj = require("minijanus");
+var debug = require("debug")("naf-janus-adapter:debug");
 
 function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
@@ -33,6 +34,8 @@ class JanusAdapter {
 
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
+
+    this.webRtcUpPromises = new Map();
   }
 
   setServerUrl(url) {
@@ -69,6 +72,7 @@ class JanusAdapter {
   }
 
   connect() {
+    debug(`connecting to ${this.serverUrl}`);
     this.ws = new WebSocket(this.serverUrl, "janus-protocol");
     this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
     this.ws.addEventListener("open", _ => this.onWebsocketOpen());
@@ -110,6 +114,10 @@ class JanusAdapter {
         this.removeOccupant(data.user_id);
       }
     }
+
+    if (message.janus && message.janus === "webrtcup") {
+      this.getWebRtcUpPromise(message.sender).resolve();
+    }
   }
 
   async addOccupant(occupantId) {
@@ -130,15 +138,33 @@ class JanusAdapter {
     }
   }
 
+  getWebRtcUpPromise(id) {
+    if (!this.webRtcUpPromises.get(id)) {
+      const promise = new Promise((resolve, reject) => {
+        this.webRtcUpPromises.set(id, { resolve });
+      });
+      this.webRtcUpPromises.get(id).promise = promise;
+    }
+    return this.webRtcUpPromises.get(id);
+  }
+
+  negotiateIce(conn, handle) {
+    return new Promise((resolve, reject) => {
+      conn.addEventListener("icecandidate", async ev => {
+        await handle.sendTrickle(ev.candidate || null);
+        if (!ev.candidate) { resolve(); }
+      });
+    });
+  }
+
   async createPublisher() {
     var handle = new mj.JanusPluginHandle(this.session);
+    debug("pub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
 
     var peerConnection = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
 
-    peerConnection.addEventListener("icecandidate", event => {
-      handle.sendTrickle(event.candidate);
-    });
+    const iceReady = this.negotiateIce(peerConnection, handle);
 
     // Create an unreliable datachannel for sending and receiving component updates, etc.
     var unreliableChannel = peerConnection.createDataChannel("unreliable", {
@@ -163,20 +189,35 @@ class JanusAdapter {
       console.warn("localMediaStream not set. Will not publish audio or video");
     }
 
+    debug("pub waiting for offer");
     var offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
 
-    var answer = await handle.sendJsep(offer);
-    await peerConnection.setRemoteDescription(answer.jsep);
+    debug("pub waiting for ice and descriptions");
+    await Promise.all([
+      iceReady,
+      peerConnection.setLocalDescription(offer),
+      (async () => {
+        const answer = await handle.sendJsep(offer);
+        return peerConnection.setRemoteDescription(answer.jsep);
+      })(),
+    ]);
 
-    // Wait for the reliable datachannel to be open before we start sending messages on it.
-    await waitForEvent(reliableChannel, "open");
+    debug("pub waiting for webrtcup");
+    await this.getWebRtcUpPromise(handle.id).promise;
 
+    debug("pub waiting for join");
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
     var message = await this.sendJoin(handle, this.room, this.userId, {notifications: true, data: true});
 
     var initialOccupants = message.plugindata.data.response.users[this.room];
 
+    if (reliableChannel.readyState !== "open") {
+      debug("pub waiting for channel to open");
+      // Wait for the reliable datachannel to be open before we start sending messages on it.
+      await waitForEvent(reliableChannel, "open");
+    }
+
+    debug("publisher ready");
     return {
       handle,
       initialOccupants,
@@ -189,26 +230,36 @@ class JanusAdapter {
 
   async createSubscriber(occupantId) {
     var handle = new mj.JanusPluginHandle(this.session);
+    debug("sub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
 
     var peerConnection = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
 
-    peerConnection.addEventListener("icecandidate", event => {
-      handle.sendTrickle(event.candidate);
-    });
+    const iceReady = this.negotiateIce(peerConnection, handle);
 
+    debug("sub waiting for join");
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's audio stream.
     const resp = await this.sendJoin(handle, this.room, this.userId, { notifications: false, media: occupantId });
 
+    debug("sub waiting for answer");
     await peerConnection.setRemoteDescription(resp.jsep);
     const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    await handle.sendJsep(peerConnection.localDescription);
+
+    debug("sub waiting for ice and descriptions");
+    await Promise.all([
+      iceReady,
+      peerConnection.setLocalDescription(answer),
+      handle.sendJsep(answer)
+    ]);
+
+    debug("sub waiting for webrtcup");
+    await this.getWebRtcUpPromise(handle.id).promise;
 
     // Get the occupant's audio stream.
     var streams = peerConnection.getRemoteStreams();
     var mediaStream = streams.length > 0 ? streams[0] : null;
 
+    debug("subscriber ready");
     return {
       handle,
       mediaStream,
