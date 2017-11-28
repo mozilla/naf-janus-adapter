@@ -152,7 +152,9 @@ class JanusAdapter {
     return new Promise((resolve, reject) => {
       conn.addEventListener("icecandidate", async ev => {
         await handle.sendTrickle(ev.candidate || null);
-        if (!ev.candidate) { resolve(); }
+        if (!ev.candidate) {
+          resolve();
+        }
       });
     });
   }
@@ -184,8 +186,7 @@ class JanusAdapter {
     if (this.localMediaStream) {
       mediaStream = this.localMediaStream;
       peerConnection.addStream(this.localMediaStream);
-    }
-    else {
+    } else {
       console.warn("localMediaStream not set. Will not publish audio or video");
     }
 
@@ -199,7 +200,7 @@ class JanusAdapter {
       (async () => {
         const answer = await handle.sendJsep(offer);
         return peerConnection.setRemoteDescription(answer.jsep);
-      })(),
+      })()
     ]);
 
     debug("pub waiting for webrtcup");
@@ -207,7 +208,10 @@ class JanusAdapter {
 
     debug("pub waiting for join");
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
-    var message = await this.sendJoin(handle, this.room, this.userId, {notifications: true, data: true});
+    var message = await this.sendJoin(handle, this.room, this.userId, {
+      notifications: true,
+      data: true
+    });
 
     var initialOccupants = message.plugindata.data.response.users[this.room];
 
@@ -239,9 +243,29 @@ class JanusAdapter {
 
     debug("sub waiting for join");
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's audio stream.
-    const resp = await this.sendJoin(handle, this.room, this.userId, { notifications: false, media: occupantId });
+    const resp = await this.sendJoin(handle, this.room, this.userId, {
+      notifications: false,
+      media: occupantId
+    });
 
     debug("sub waiting for answer");
+    let sdp = resp.jsep.sdp;
+
+    // TODO: Hack to get video working on Chrome for Android. https://groups.google.com/forum/#!topic/mozilla.dev.media/Ye29vuMTpo8
+    if (navigator.userAgent.indexOf("Android") === -1) {
+      sdp = sdp.replace(
+        "a=rtcp-fb:107 goog-remb\r\n",
+        "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f\r\n"
+      );
+    } else {
+      sdp = sdp.replace(
+        "a=rtcp-fb:107 goog-remb\r\n",
+        "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f\r\n"
+      );
+    }
+
+    resp.jsep.sdp = sdp;
+
     await peerConnection.setRemoteDescription(resp.jsep);
     const answer = await peerConnection.createAnswer();
 
@@ -314,7 +338,9 @@ class JanusAdapter {
 
   setLocalMediaStream(stream) {
     if (this.publisher) {
-      console.warn("setLocalMediaStream called after publisher created. Will not publish new stream.");
+      console.warn(
+        "setLocalMediaStream called after publisher created. Will not publish new stream."
+      );
     }
     // @TODO this should handle renegotiating the publisher connection if it has already been made
     this.localMediaStream = stream;
