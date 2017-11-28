@@ -193,17 +193,6 @@ class JanusAdapter {
     debug("pub waiting for offer");
     var offer = await peerConnection.createOffer();
 
-    let sdp = offer.sdp;
-
-    console.log("original sdp:", sdp);
-
-    sdp = sdp.replace("m=video 9 RTP/SAVPF 107", "m=video 9 RTP/SAVPF 127");
-    sdp = sdp.replace(new RegExp(":107", "g"), ":127");
-
-    console.log("modified sdp:", sdp);
-
-    offer.sdp = sdp;
-
     debug("pub waiting for ice and descriptions");
     await Promise.all([
       iceReady,
