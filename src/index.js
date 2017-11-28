@@ -107,10 +107,13 @@ class JanusAdapter {
     // Handle all of the join and leave events from the publisher.
     if (message.plugindata && message.plugindata.data) {
       var data = message.plugindata.data;
-
-      if (data.event === "join") {
+      if (data.event === "join" && data.room_id === this.room) {
         this.occupantPromises[data.user_id] = this.addOccupant(data.user_id);
-      } else if (data.event && data.event === "leave") {
+      } else if (
+        data.event &&
+        data.event === "leave" &&
+        data.room_id === this.room
+      ) {
         this.removeOccupant(data.user_id);
       }
     }
