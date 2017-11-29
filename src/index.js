@@ -30,7 +30,9 @@ class JanusAdapter {
 
     this.publisher = null;
     this.occupants = {};
-    this.occupantPromises = {};
+    this.occupantPeerConnections = {};
+    this.mediaStreams = {};
+    this.pendingMediaRequests = {};
 
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
@@ -86,16 +88,21 @@ class JanusAdapter {
     // Attach the SFU Plugin and create a RTCPeerConnection for the publisher.
     // The publisher sends audio and opens two bidirectional data channels.
     // One reliable datachannel and one unreliable.
-    var publisherPromise = this.createPublisher();
-    this.occupantPromises[this.userId] = publisherPromise;
-    this.publisher = await publisherPromise;
+    this.publisher = await this.createPublisher();
 
-    this.connectSuccess(this.userId);
+    this.mediaStreams[this.userId] = this.publisher.mediaStream;
+
+    // Resolve the promise for the user's media stream if it exists.
+    if (this.pendingMediaRequests[this.userId]) {
+      this.pendingMediaRequests[this.userId].resolve(
+        this.publisher.mediaStream
+      );
+    }
 
     // Add all of the initial occupants.
     for (let occupantId of this.publisher.initialOccupants) {
       if (occupantId !== this.userId) {
-        this.occupantPromises[occupantId] = this.addOccupant(occupantId);
+        this.addOccupant(occupantId);
       }
     }
   }
@@ -108,7 +115,7 @@ class JanusAdapter {
     if (message.plugindata && message.plugindata.data) {
       var data = message.plugindata.data;
       if (data.event === "join" && data.room_id === this.room) {
-        this.occupantPromises[data.user_id] = this.addOccupant(data.user_id);
+        this.addOccupant(data.user_id);
       } else if (
         data.event &&
         data.event === "leave" &&
@@ -125,16 +132,44 @@ class JanusAdapter {
 
   async addOccupant(occupantId) {
     var subscriber = await this.createSubscriber(occupantId);
+
+    this.occupants[occupantId] = true;
+    this.occupantPeerConnections[occupantId] = subscriber.peerConnection;
+    this.mediaStreams[occupantId] = subscriber.mediaStream;
+
+    // Resolve the promise for the user's media stream if it exists.
+    if (this.pendingMediaRequests[occupantId]) {
+      this.pendingMediaRequests[occupantId].resolve(subscriber.mediaStream);
+    }
+
     // Call the Networked AFrame callbacks for the new occupant.
     this.onOccupantConnected(occupantId);
-    this.occupants[occupantId] = true;
     this.onOccupantsChanged(this.occupants);
+
     return subscriber;
   }
 
   removeOccupant(occupantId) {
     if (this.occupants[occupantId]) {
+      // Close the subscriber peer connection. Which also detaches the plugin handle.
+      if (this.occupantPeerConnections[occupantId]) {
+        this.occupantPeerConnections[occupantId].close();
+        delete this.occupantPeerConnections[occupantId];
+      }
+
+      if (this.mediaStreams[occupantId]) {
+        delete this.mediaStreams[occupantId];
+      }
+
+      if (this.pendingMediaRequests[occupantId]) {
+        this.pendingMediaRequests[occupantId].reject(
+          "The user disconnected before the media stream was resolved."
+        );
+        delete this.pendingMediaRequests[occupantId];
+      }
+
       delete this.occupants[occupantId];
+
       // Call the Networked AFrame callbacks for the removed occupant.
       this.onOccupantDisconnected(occupantId);
       this.onOccupantsChanged(this.occupants);
@@ -199,6 +234,15 @@ class JanusAdapter {
     debug("pub waiting for webrtcup");
     await this.getWebRtcUpPromise(handle.id).promise;
 
+    if (reliableChannel.readyState !== "open") {
+      debug("pub waiting for channel to open");
+      // Wait for the reliable datachannel to be open before we start sending messages on it.
+      await waitForEvent(reliableChannel, "open");
+    }
+
+    // Call the naf connectSuccess callback before we start receiving WebRTC messages.
+    this.connectSuccess(this.userId);
+
     debug("pub waiting for join");
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
     var message = await this.sendJoin(handle, this.room, this.userId, {
@@ -207,12 +251,6 @@ class JanusAdapter {
     });
 
     var initialOccupants = message.plugindata.data.response.users[this.room];
-
-    if (reliableChannel.readyState !== "open") {
-      debug("pub waiting for channel to open");
-      // Wait for the reliable datachannel to be open before we start sending messages on it.
-      await waitForEvent(reliableChannel, "open");
-    }
 
     debug("publisher ready");
     return {
@@ -323,15 +361,15 @@ class JanusAdapter {
   }
 
   getMediaStream(clientId) {
-    var occupantPromise = this.occupantPromises[clientId];
-
-    if (!occupantPromise) {
-      return Promise.reject(
-        new Error(`Subscriber for client: ${clientId} does not exist.`)
-      );
+    if (this.mediaStreams[clientId]) {
+      debug("Already had audio for " + clientId);
+      return Promise.resolve(this.mediaStreams[clientId]);
+    } else {
+      debug("Waiting on audio for " + clientId);
+      return new Promise((resolve, reject) => {
+        this.pendingMediaRequests[clientId] = { resolve, reject };
+      });
     }
-
-    return occupantPromise.then(s => s.mediaStream);
   }
 
   setLocalMediaStream(stream) {
