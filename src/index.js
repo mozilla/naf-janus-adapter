@@ -31,8 +31,8 @@ class JanusAdapter {
     this.publisher = null;
     this.occupants = {};
     this.occupantPeerConnections = {};
-    this.audioStreams = {};
-    this.pendingAudioRequests = {};
+    this.mediaStreams = {};
+    this.pendingMediaRequests = {};
 
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
@@ -90,11 +90,11 @@ class JanusAdapter {
     // One reliable datachannel and one unreliable.
     this.publisher = await this.createPublisher();
 
-    this.audioStreams[this.userId] = this.publisher.mediaStream;
+    this.mediaStreams[this.userId] = this.publisher.mediaStream;
 
     // Resolve the promise for the user's media stream if it exists.
-    if (this.pendingAudioRequests[this.userId]) {
-      this.pendingAudioRequests[this.userId].resolve(
+    if (this.pendingMediaRequests[this.userId]) {
+      this.pendingMediaRequests[this.userId].resolve(
         this.publisher.mediaStream
       );
     }
@@ -135,11 +135,11 @@ class JanusAdapter {
 
     this.occupants[occupantId] = true;
     this.occupantPeerConnections[occupantId] = subscriber.peerConnection;
-    this.audioStreams[occupantId] = subscriber.mediaStream;
+    this.mediaStreams[occupantId] = subscriber.mediaStream;
 
     // Resolve the promise for the user's media stream if it exists.
-    if (this.pendingAudioRequests[occupantId]) {
-      this.pendingAudioRequests[occupantId].resolve(subscriber.mediaStream);
+    if (this.pendingMediaRequests[occupantId]) {
+      this.pendingMediaRequests[occupantId].resolve(subscriber.mediaStream);
     }
 
     // Call the Networked AFrame callbacks for the new occupant.
@@ -157,15 +157,15 @@ class JanusAdapter {
         delete this.occupantPeerConnections[occupantId];
       }
 
-      if (this.audioStreams[occupantId]) {
-        delete this.audioStreams[occupantId];
+      if (this.mediaStreams[occupantId]) {
+        delete this.mediaStreams[occupantId];
       }
 
-      if (this.pendingAudioRequests[occupantId]) {
-        this.pendingAudioRequests[occupantId].reject(
+      if (this.pendingMediaRequests[occupantId]) {
+        this.pendingMediaRequests[occupantId].reject(
           "The user disconnected before the media stream was resolved."
         );
-        delete this.pendingAudioRequests[occupantId];
+        delete this.pendingMediaRequests[occupantId];
       }
 
       delete this.occupants[occupantId];
@@ -366,13 +366,13 @@ class JanusAdapter {
   }
 
   getMediaStream(clientId) {
-    if (this.audioStreams[clientId]) {
-      NAF.log.write("Already had audio for " + clientId);
-      return Promise.resolve(this.audioStreams[clientId]);
+    if (this.mediaStreams[clientId]) {
+      debug("Already had audio for " + clientId);
+      return Promise.resolve(this.mediaStreams[clientId]);
     } else {
-      NAF.log.write("Waiting on audio for " + clientId);
+      debug("Waiting on audio for " + clientId);
       return new Promise((resolve, reject) => {
-        this.pendingAudioRequests[clientId] = { resolve, reject };
+        this.pendingMediaRequests[clientId] = { resolve, reject };
       });
     }
   }
