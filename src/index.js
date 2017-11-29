@@ -188,9 +188,13 @@ class JanusAdapter {
     var offer = await peerConnection.createOffer();
 
     debug("pub waiting for local/remote descriptions");
-    await peerConnection.setLocalDescription(offer);
-    const answer = await handle.sendJsep(offer);
-    await peerConnection.setRemoteDescription(answer.jsep);
+
+    await Promise.all([
+      peerConnection.setLocalDescription(offer),
+      handle
+        .sendJsep(offer)
+        .then(({ jsep }) => peerConnection.setRemoteDescription(jsep))
+    ]);
 
     debug("pub waiting for webrtcup");
     await this.getWebRtcUpPromise(handle.id).promise;
@@ -257,13 +261,18 @@ class JanusAdapter {
 
     resp.jsep.sdp = sdp;
 
-    await peerConnection.setRemoteDescription(resp.jsep);
-
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-
-    debug("sub sending answer");
-    await handle.sendJsep(answer);
+    debug("sub sending answer and setting remote/local description");
+    await Promise.all([
+      peerConnection.setRemoteDescription(resp.jsep),
+      peerConnection
+        .createAnswer()
+        .then(answer =>
+          Promise.all([
+            peerConnection.setLocalDescription(answer),
+            handle.sendJsep(answer)
+          ])
+        )
+    ]);
 
     debug("sub waiting for webrtcup");
     await this.getWebRtcUpPromise(handle.id).promise;
