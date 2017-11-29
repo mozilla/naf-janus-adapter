@@ -151,17 +151,6 @@ class JanusAdapter {
     return this.webRtcUpPromises.get(id);
   }
 
-  negotiateIce(conn, handle) {
-    return new Promise((resolve, reject) => {
-      conn.addEventListener("icecandidate", async ev => {
-        await handle.sendTrickle(ev.candidate || null);
-        if (!ev.candidate) {
-          resolve();
-        }
-      });
-    });
-  }
-
   async createPublisher() {
     var handle = new mj.JanusPluginHandle(this.session);
     debug("pub waiting for sfu");
@@ -169,7 +158,9 @@ class JanusAdapter {
 
     var peerConnection = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
 
-    const iceReady = this.negotiateIce(peerConnection, handle);
+    peerConnection.addEventListener("icecandidate", event => {
+      handle.sendTrickle(event.candidate || null);
+    });
 
     // Create an unreliable datachannel for sending and receiving component updates, etc.
     var unreliableChannel = peerConnection.createDataChannel("unreliable", {
@@ -196,15 +187,10 @@ class JanusAdapter {
     debug("pub waiting for offer");
     var offer = await peerConnection.createOffer();
 
-    debug("pub waiting for ice and descriptions");
-    await Promise.all([
-      iceReady,
-      peerConnection.setLocalDescription(offer),
-      (async () => {
-        const answer = await handle.sendJsep(offer);
-        return peerConnection.setRemoteDescription(answer.jsep);
-      })()
-    ]);
+    debug("pub waiting for local/remote descriptions");
+    await peerConnection.setLocalDescription(offer);
+    const answer = await handle.sendJsep(offer);
+    await peerConnection.setRemoteDescription(answer.jsep);
 
     debug("pub waiting for webrtcup");
     await this.getWebRtcUpPromise(handle.id).promise;
@@ -242,7 +228,9 @@ class JanusAdapter {
 
     var peerConnection = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
 
-    const iceReady = this.negotiateIce(peerConnection, handle);
+    peerConnection.addEventListener("icecandidate", event => {
+      handle.sendTrickle(event.candidate || null);
+    });
 
     debug("sub waiting for join");
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's audio stream.
@@ -270,14 +258,12 @@ class JanusAdapter {
     resp.jsep.sdp = sdp;
 
     await peerConnection.setRemoteDescription(resp.jsep);
-    const answer = await peerConnection.createAnswer();
 
-    debug("sub waiting for ice and descriptions");
-    await Promise.all([
-      iceReady,
-      peerConnection.setLocalDescription(answer),
-      handle.sendJsep(answer)
-    ]);
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+
+    debug("sub sending answer");
+    await handle.sendJsep(answer);
 
     debug("sub waiting for webrtcup");
     await this.getWebRtcUpPromise(handle.id).promise;
