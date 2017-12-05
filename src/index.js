@@ -367,7 +367,7 @@ class JanusAdapter {
     } else {
       debug("Waiting on audio for " + clientId);
       if (!this.pendingMediaRequests.has(clientId)) {
-        const promise = return new Promise((resolve, reject) => {
+        const promise = new Promise((resolve, reject) => {
           this.pendingMediaRequests.set(clientId, { resolve, reject });
         });
         this.pendingMediaRequests.get(clientId).promise = promise;
