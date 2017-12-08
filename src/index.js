@@ -32,7 +32,7 @@ class JanusAdapter {
     this.occupants = {};
     this.occupantPeerConnections = {};
     this.mediaStreams = {};
-    this.pendingMediaRequests = {};
+    this.pendingMediaRequests = new Map();
 
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
@@ -93,8 +93,8 @@ class JanusAdapter {
     this.mediaStreams[this.userId] = this.publisher.mediaStream;
 
     // Resolve the promise for the user's media stream if it exists.
-    if (this.pendingMediaRequests[this.userId]) {
-      this.pendingMediaRequests[this.userId].resolve(
+    if (this.pendingMediaRequests.has(this.userId)) {
+      this.pendingMediaRequests.get(this.userId).resolve(
         this.publisher.mediaStream
       );
     }
@@ -138,8 +138,8 @@ class JanusAdapter {
     this.mediaStreams[occupantId] = subscriber.mediaStream;
 
     // Resolve the promise for the user's media stream if it exists.
-    if (this.pendingMediaRequests[occupantId]) {
-      this.pendingMediaRequests[occupantId].resolve(subscriber.mediaStream);
+    if (this.pendingMediaRequests.has(occupantId)) {
+      this.pendingMediaRequests.get(occupantId).resolve(subscriber.mediaStream);
     }
 
     // Call the Networked AFrame callbacks for the new occupant.
@@ -161,11 +161,11 @@ class JanusAdapter {
         delete this.mediaStreams[occupantId];
       }
 
-      if (this.pendingMediaRequests[occupantId]) {
-        this.pendingMediaRequests[occupantId].reject(
+      if (this.pendingMediaRequests.has(occupantId)) {
+        this.pendingMediaRequests.get(occupantId).reject(
           "The user disconnected before the media stream was resolved."
         );
-        delete this.pendingMediaRequests[occupantId];
+        this.pendingMediaRequests.delete(occupantId);
       }
 
       delete this.occupants[occupantId];
@@ -366,9 +366,13 @@ class JanusAdapter {
       return Promise.resolve(this.mediaStreams[clientId]);
     } else {
       debug("Waiting on audio for " + clientId);
-      return new Promise((resolve, reject) => {
-        this.pendingMediaRequests[clientId] = { resolve, reject };
-      });
+      if (!this.pendingMediaRequests.has(clientId)) {
+        const promise = new Promise((resolve, reject) => {
+          this.pendingMediaRequests.set(clientId, { resolve, reject });
+        });
+        this.pendingMediaRequests.get(clientId).promise = promise;
+      }
+      return this.pendingMediaRequests.get(clientId).promise;
     }
   }
 
