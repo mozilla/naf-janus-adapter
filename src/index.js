@@ -94,9 +94,9 @@ class JanusAdapter {
 
     // Resolve the promise for the user's media stream if it exists.
     if (this.pendingMediaRequests.has(this.userId)) {
-      this.pendingMediaRequests.get(this.userId).resolve(
-        this.publisher.mediaStream
-      );
+      this.pendingMediaRequests
+        .get(this.userId)
+        .resolve(this.publisher.mediaStream);
     }
 
     // Add all of the initial occupants.
@@ -162,9 +162,11 @@ class JanusAdapter {
       }
 
       if (this.pendingMediaRequests.has(occupantId)) {
-        this.pendingMediaRequests.get(occupantId).reject(
-          "The user disconnected before the media stream was resolved."
-        );
+        this.pendingMediaRequests
+          .get(occupantId)
+          .reject(
+            "The user disconnected before the media stream was resolved."
+          );
         this.pendingMediaRequests.delete(occupantId);
       }
 
@@ -250,7 +252,8 @@ class JanusAdapter {
       data: true
     });
 
-    var initialOccupants = message.plugindata.data.response.users[this.room];
+    var initialOccupants =
+      message.plugindata.data.response.users[this.room] || [];
 
     debug("publisher ready");
     return {
