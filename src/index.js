@@ -34,6 +34,10 @@ class JanusAdapter {
     this.mediaStreams = {};
     this.pendingMediaRequests = new Map();
 
+    this.timeOffsets = [];
+    this.serverTimeRequests = 0;
+    this.avgTimeOffset = 0;
+
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
 
@@ -82,6 +86,8 @@ class JanusAdapter {
   }
 
   async onWebsocketOpen() {
+    await this.updateTimeOffset();
+
     // Create the Janus Session
     await this.session.create();
 
@@ -361,6 +367,45 @@ class JanusAdapter {
     } else {
       return NAF.adapters.NOT_CONNECTED;
     }
+  }
+
+  async updateTimeOffset() {
+    const clientSentTime = Date.now() + this.avgTimeOffset;
+
+    const res = await fetch(document.location.href, {
+      method: "HEAD",
+      cache: "no-cache"
+    });
+
+    const precision = 1000;
+    const serverReceivedTime =
+      new Date(res.headers.get("Date")).getTime() + precision / 2;
+    const clientReceivedTime = Date.now();
+    const serverTime =
+      serverReceivedTime + (clientReceivedTime - clientSentTime) / 2;
+    const timeOffset = serverTime - clientReceivedTime;
+
+    this.serverTimeRequests++;
+
+    if (this.serverTimeRequests <= 10) {
+      this.timeOffsets.push(timeOffset);
+    } else {
+      this.timeOffsets[this.serverTimeRequests % 10] = timeOffset;
+    }
+
+    this.avgTimeOffset =
+      this.timeOffsets.reduce((acc, offset) => (acc += offset), 0) /
+      this.timeOffsets.length;
+
+    if (this.serverTimeRequests > 10) {
+      setTimeout(() => this.updateTimeOffset(), 5 * 60 * 1000); // Sync clock every 5 minutes.
+    } else {
+      this.updateTimeOffset();
+    }
+  }
+
+  getServerTime() {
+    return Date.now() + this.avgTimeOffset;
   }
 
   getMediaStream(clientId) {
