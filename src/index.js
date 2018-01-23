@@ -26,7 +26,6 @@ class JanusAdapter {
 
     this.publisher = null;
     this.occupants = {};
-    this.occupantPeerConnections = {};
     this.mediaStreams = {};
     this.pendingMediaRequests = new Map();
 
@@ -90,21 +89,10 @@ class JanusAdapter {
     // One reliable datachannel and one unreliable.
     this.publisher = await this.createPublisher();
 
-    this.mediaStreams[this.userId] = this.publisher.mediaStream;
-
-    // Resolve the promise for the user's media stream if it exists.
-    if (this.pendingMediaRequests.has(this.userId)) {
-      this.pendingMediaRequests
-        .get(this.userId)
-        .resolve(this.publisher.mediaStream);
-    }
+    this.setMediaStream(this.userId, this.publisher.mediaStream);
 
     // Add all of the initial occupants.
-    for (let occupantId of this.publisher.initialOccupants) {
-      if (occupantId !== this.userId) {
-        this.addOccupant(occupantId);
-      }
-    }
+    await Promise.all(this.publisher.initialOccupants.map(this.addOccupant.bind(this)));
   }
 
   onWebsocketMessage(event) {
@@ -114,14 +102,9 @@ class JanusAdapter {
   async addOccupant(occupantId) {
     var subscriber = await this.createSubscriber(occupantId);
 
-    this.occupants[occupantId] = true;
-    this.occupantPeerConnections[occupantId] = subscriber.conn;
-    this.mediaStreams[occupantId] = subscriber.mediaStream;
+    this.occupants[occupantId] = subscriber;
 
-    // Resolve the promise for the user's media stream if it exists.
-    if (this.pendingMediaRequests.has(occupantId)) {
-      this.pendingMediaRequests.get(occupantId).resolve(subscriber.mediaStream);
-    }
+    this.setMediaStream(occupantId, subscriber.mediaStream);
 
     // Call the Networked AFrame callbacks for the new occupant.
     this.onOccupantConnected(occupantId);
@@ -133,9 +116,9 @@ class JanusAdapter {
   removeOccupant(occupantId) {
     if (this.occupants[occupantId]) {
       // Close the subscriber peer connection. Which also detaches the plugin handle.
-      if (this.occupantPeerConnections[occupantId]) {
-        this.occupantPeerConnections[occupantId].close();
-        delete this.occupantPeerConnections[occupantId];
+      if (this.occupants[occupantId]) {
+        this.occupants[occupantId].conn.close();
+        delete this.occupants[occupantId];
       }
 
       if (this.mediaStreams[occupantId]) {
@@ -150,8 +133,6 @@ class JanusAdapter {
           );
         this.pendingMediaRequests.delete(occupantId);
       }
-
-      delete this.occupants[occupantId];
 
       // Call the Networked AFrame callbacks for the removed occupant.
       this.onOccupantDisconnected(occupantId);
@@ -311,20 +292,16 @@ class JanusAdapter {
     }
   }
 
-  shouldStartConnectionTo(clientId) {
+  shouldStartConnectionTo(client) {
     return true;
   }
 
-  startStreamConnection(clientId) {}
+  startStreamConnection(client) {}
 
-  closeStreamConnection(clientId) {}
+  closeStreamConnection(client) {}
 
   getConnectStatus(clientId) {
-    if (this.occupants[clientId]) {
-      return NAF.adapters.IS_CONNECTED;
-    } else {
-      return NAF.adapters.NOT_CONNECTED;
-    }
+    return this.occupants[clientId] ? NAF.adapters.IS_CONNECTED : NAF.adapters.NOT_CONNECTED;
   }
 
   async updateTimeOffset() {
@@ -379,6 +356,15 @@ class JanusAdapter {
         this.pendingMediaRequests.get(clientId).promise = promise;
       }
       return this.pendingMediaRequests.get(clientId).promise;
+    }
+  }
+
+  setMediaStream(clientId, stream) {
+    this.mediaStreams[clientId] = stream;
+
+    // Resolve the promise for the user's media stream if it exists.
+    if (this.pendingMediaRequests.has(clientId)) {
+      this.pendingMediaRequests.get(clientId).resolve(stream);
     }
   }
 
