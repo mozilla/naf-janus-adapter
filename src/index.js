@@ -1,5 +1,6 @@
 var mj = require("minijanus");
 var debug = require("debug")("naf-janus-adapter:debug");
+var codecDetect = require("codec-detect");
 
 function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
@@ -293,17 +294,20 @@ class JanusAdapter {
     debug("sub waiting for answer");
     let sdp = resp.jsep.sdp;
 
-    // TODO: Hack to get video working on Chrome for Android. https://groups.google.com/forum/#!topic/mozilla.dev.media/Ye29vuMTpo8
-    if (navigator.userAgent.indexOf("Android") === -1) {
-      sdp = sdp.replace(
-        "a=rtcp-fb:107 goog-remb\r\n",
-        "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f\r\n"
-      );
-    } else {
-      sdp = sdp.replace(
-        "a=rtcp-fb:107 goog-remb\r\n",
-        "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f\r\n"
-      );
+    const h246Support = codecDetect.isH264VideoSupported();
+    if (h246Support === 'probably' || h246Support === 'maybe') {
+      // TODO: Hack to get video working on Chrome for Android. https://groups.google.com/forum/#!topic/mozilla.dev.media/Ye29vuMTpo8
+      if (navigator.userAgent.indexOf("Android") === -1) {
+        sdp = sdp.replace(
+          "a=rtcp-fb:107 goog-remb\r\n",
+          "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f\r\n"
+        );
+      } else {
+        sdp = sdp.replace(
+          "a=rtcp-fb:107 goog-remb\r\n",
+          "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f\r\n"
+        );
+      }
     }
 
     resp.jsep.sdp = sdp;
