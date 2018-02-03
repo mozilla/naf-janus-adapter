@@ -41,7 +41,7 @@
         audio: true;
         debug: true;
         adapter: janus;
-        connectOnLoad: false;
+        connectOnLoad: true;
         serverURL: wss://dev-janus.reticulum.io;
       ">
     <a-assets>
@@ -135,16 +135,9 @@
     }
 
     // Prompt for audio.
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      var scene = document.querySelector("a-scene");
-      scene.components["networked-scene"].connect();
-      // @TODO ideally the adapter should exist before connect, but it currently doesn't so we
-      // have to do this after calling connect. This might be a race condition in other adapters.
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
       NAF.connection.adapter.setLocalMediaStream(stream);
-    }).catch((err) => {
-      // Be sure to still connect when the user rejects the microphone prompt.
-      var scene = document.querySelector("a-scene");
-      scene.components["networked-scene"].connect();
+    }).catch(err => {
       console.warn("Microphone access not allowed. This client will not broadcast audio.");
     })
   </script>
