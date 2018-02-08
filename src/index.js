@@ -89,6 +89,9 @@ class JanusAdapter {
     // One reliable datachannel and one unreliable.
     this.publisher = await this.createPublisher();
 
+    // Call the naf connectSuccess callback before we start receiving WebRTC messages.
+    this.connectSuccess(this.userId);
+
     this.setMediaStream(this.userId, this.publisher.mediaStream);
 
     // Add all of the initial occupants.
@@ -199,9 +202,6 @@ class JanusAdapter {
 
     debug("pub waiting for webrtcup");
     await new Promise(resolve => handle.on("webrtcup", resolve));
-
-    // Call the naf connectSuccess callback before we start receiving WebRTC messages.
-    this.connectSuccess(this.userId);
 
     // Handle all of the join and leave events.
     handle.on("event", ev => {
