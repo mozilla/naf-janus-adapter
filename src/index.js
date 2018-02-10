@@ -305,7 +305,7 @@ class JanusAdapter {
   }
 
   async updateTimeOffset() {
-    const clientSentTime = Date.now() + this.avgTimeOffset;
+    const clientSentTime = Date.now();
 
     const res = await fetch(document.location.href, {
       method: "HEAD",
