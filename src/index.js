@@ -7,6 +7,11 @@ function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 }
 
+const isH264VideoSupported = (() => {
+  const video = document.createElement("video");
+  return video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') !== "";
+})();
+
 const PEER_CONNECTION_CONFIG = {
   iceServers: [
     { urls: "stun:stun1.l.google.com:19302" },
@@ -230,6 +235,10 @@ class JanusAdapter {
   }
 
   configureSubscriberSdp(originalSdp) {
+    if (!isH264VideoSupported) {
+      return originalSdp;
+    }
+
     // TODO: Hack to get video working on Chrome for Android. https://groups.google.com/forum/#!topic/mozilla.dev.media/Ye29vuMTpo8
     if (navigator.userAgent.indexOf("Android") === -1) {
       return originalSdp.replace(
