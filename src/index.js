@@ -1,12 +1,16 @@
 var mj = require("minijanus");
 var debug = require("debug")("naf-janus-adapter:debug");
-var codecDetect = require("codec-detect");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
 
 function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 }
+
+const isH264VideoSupported = (() => {
+  const video = document.createElement("video");
+  return video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') !== "";
+})();
 
 const PEER_CONNECTION_CONFIG = {
   iceServers: [
@@ -231,7 +235,7 @@ class JanusAdapter {
   }
 
   configureSubscriberSdp(originalSdp) {
-    if (codecDetect.isH264VideoSupported()) {
+    if (!this.isH264VideoSupported) {
       return originalSdp;
     }
 
