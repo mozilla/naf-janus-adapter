@@ -235,7 +235,7 @@ class JanusAdapter {
   }
 
   configureSubscriberSdp(originalSdp) {
-    if (!this.isH264VideoSupported) {
+    if (!isH264VideoSupported) {
       return originalSdp;
     }
 
