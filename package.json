@@ -4,7 +4,7 @@
   "description": "networked-aframe Janus network adapter",
   "main": "src/index.js",
   "license": "MPL-2.0",
-  "respository": "github:mozilla/naf-janus-adapter",
+  "repository": "github:mozilla/naf-janus-adapter",
   "devDependencies": {
     "babel-core": "^6.26.0",
     "babel-loader": "^7.1.2",
