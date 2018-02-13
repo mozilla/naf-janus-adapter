@@ -28,7 +28,6 @@
     "build": "npm run build:dev && npm run build:prod",
     "build:dev": "webpack --config webpack.dev.js",
     "build:prod": "webpack --config webpack.prod.js",
-    "prepublish": "npm run build",
-    "release": "np"
+    "release": "npm run build && git commit -am 'update builds' && np"
   }
 }
