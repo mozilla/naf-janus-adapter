@@ -3,6 +3,14 @@ var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
 
+function debounce(fn) {
+  var curr = Promise.resolve();
+  return function() {
+    var args = Array.prototype.slice.call(arguments);
+    curr = curr.then(_ => fn.apply(this, args));
+  };
+}
+
 function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 }
@@ -32,12 +40,14 @@ class JanusAdapter {
     this.publisher = null;
     this.occupants = {};
     this.mediaStreams = {};
+    this.localMediaStream = null;
     this.pendingMediaRequests = new Map();
 
     this.timeOffsets = [];
     this.serverTimeRequests = 0;
     this.avgTimeOffset = 0;
 
+    this.onWebsocketOpen = this.onWebsocketOpen.bind(this);
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
   }
@@ -79,7 +89,7 @@ class JanusAdapter {
     debug(`connecting to ${this.serverUrl}`);
     this.ws = new WebSocket(this.serverUrl, "janus-protocol");
     this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
-    this.ws.addEventListener("open", _ => this.onWebsocketOpen());
+    this.ws.addEventListener("open", this.onWebsocketOpen);
     this.ws.addEventListener("message", this.onWebsocketMessage);
   }
 
@@ -96,8 +106,6 @@ class JanusAdapter {
 
     // Call the naf connectSuccess callback before we start receiving WebRTC messages.
     this.connectSuccess(this.userId);
-
-    this.setMediaStream(this.userId, this.publisher.mediaStream);
 
     // Add all of the initial occupants.
     await Promise.all(this.publisher.initialOccupants.map(this.addOccupant.bind(this)));
@@ -148,43 +156,42 @@ class JanusAdapter {
     }
   }
 
-  negotiateIce(conn, handle) {
-    return new Promise((resolve, reject) => {
-      conn.addEventListener("icecandidate", ev => {
-        handle.sendTrickle(ev.candidate || null).then(() => {
-          if (!ev.candidate) { // this was the last candidate on our end and now they received it
-            resolve();
-          }
-        }, reject);
-      });
+  associate(conn, handle) {
+    conn.addEventListener("icecandidate", ev => {
+      handle.sendTrickle(ev.candidate || null).catch(e => error("Error trickling ICE: %o", e));
     });
-  }
 
-  async negotiatePublisherMedia(conn, handle) {
-    debug("pub sending offer and setting remote/local description");
-    var offer = await conn.createOffer();
-    var localReady = conn.setLocalDescription(offer);
-    var remoteReady = handle.sendJsep(offer).then(({ jsep }) => conn.setRemoteDescription(jsep));
-    return await Promise.all([localReady, remoteReady]);
-  }
+    // we have to debounce these because janus gets angry if you send it a new SDP before it's finished processing an
+    // existing SDP. maybe another, slightly more correct approach would be to not set the remote description until we
+    // get the webrtcup event?
+    conn.addEventListener("negotiationneeded", debounce(ev => {
+      debug("Sending new offer for handle: %o", handle);
+      var offer = conn.createOffer();
+      var local = offer.then(o => conn.setLocalDescription(o));
+      var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
+      return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
+    }));
 
-  async negotiateSubscriberMedia(conn, handle, offer) {
-    debug("sub sending answer and setting remote/local description");
-    var desc = await conn.setRemoteDescription(offer);
-    var answer = await conn.createAnswer();
-    var localReady = conn.setLocalDescription(answer);
-    var remoteReady = handle.sendJsep(answer);
-    return await Promise.all([localReady, remoteReady]);
+    handle.on("event", debounce(ev => {
+      var jsep = ev.jsep;
+      if (jsep && jsep.type == "offer") {
+        debug("Accepting new offer for handle: %o", handle);
+        jsep.sdp = this.configureSubscriberSdp(jsep.sdp);
+        var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
+        var local = answer.then(a => conn.setLocalDescription(a));
+        var remote = answer.then(j => handle.sendJsep(j));
+        Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
+      }
+    }));
   }
 
   async createPublisher() {
     var handle = new mj.JanusPluginHandle(this.session);
+    var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
+    this.associate(conn, handle);
+
     debug("pub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
-
-    var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
-
-    this.negotiateIce(conn, handle).catch(err => error("Error negotiating ICE candidates: %o", err));
 
     // Create an unreliable datachannel for sending and receiving component updates, etc.
     var unreliableChannel = conn.createDataChannel("unreliable", { ordered: false, maxRetransmits: 0 });
@@ -194,16 +201,9 @@ class JanusAdapter {
     var reliableChannel = conn.createDataChannel("reliable", { ordered: true });
     reliableChannel.addEventListener("message", this.onDataChannelMessage);
 
-    var mediaStream;
-    // @TODO either this should wait or setLocalMediaStream should renegotiate (or both)
     if (this.localMediaStream) {
-      mediaStream = this.localMediaStream;
       conn.addStream(this.localMediaStream);
-    } else {
-      warn("localMediaStream not set. Will not publish audio or video");
     }
-
-    this.negotiatePublisherMedia(conn, handle).catch(err => error("Error negotiating media: %o", err));
 
     debug("pub waiting for webrtcup");
     await new Promise(resolve => handle.on("webrtcup", resolve));
@@ -229,7 +229,6 @@ class JanusAdapter {
       initialOccupants,
       reliableChannel,
       unreliableChannel,
-      mediaStream,
       conn
     };
   }
@@ -255,19 +254,16 @@ class JanusAdapter {
 
   async createSubscriber(occupantId) {
     var handle = new mj.JanusPluginHandle(this.session);
+    var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
+    this.associate(conn, handle);
+
     debug("sub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
 
-    var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
-
-    this.negotiateIce(conn, handle).catch(err => error("Error negotiating ICE candidates: %o", err));
-
     debug("sub waiting for join");
-    // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's audio stream.
+    // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's media.
+    // Janus should send us an offer for this occupant's media in response to this.
     const resp = await this.sendJoin(handle, { media: occupantId });
-    resp.jsep.sdp = this.configureSubscriberSdp(resp.jsep.sdp);
-
-    this.negotiateSubscriberMedia(conn, handle, resp.jsep).catch(err => error("Error negotiating media: %o", err));
 
     debug("sub waiting for webrtcup");
     await new Promise(resolve => handle.on("webrtcup", resolve));
@@ -378,21 +374,49 @@ class JanusAdapter {
   }
 
   setLocalMediaStream(stream) {
-    if (this.publisher) {
-      console.warn(
-        "setLocalMediaStream called after publisher created. Will not publish new stream."
-      );
+    // our job here is to make sure the connection winds up with RTP senders sending the stuff in this stream,
+    // and not the stuff that isn't in this stream. strategy is to replace existing tracks if we can, add tracks
+    // that we can't replace, and disable tracks that don't exist anymore.
+
+    // note that we don't ever remove a track from the stream -- since Janus doesn't support Unified Plan, we absolutely
+    // can't wind up with a SDP that has >1 audio or >1 video tracks, even if one of them is inactive (what you get if
+    // you remove a track from an existing stream.)
+    if (this.publisher && this.publisher.conn) {
+      var existingSenders = this.publisher.conn.getSenders();
+      var newSenders = [];
+      stream.getTracks().forEach(t => {
+        var sender = existingSenders.find(s => s.track != null && s.track.kind == t.kind);
+        if (sender != null) {
+          if (sender.replaceTrack) {
+            sender.replaceTrack(t);
+            sender.track.enabled = true;
+          } else {
+            // replaceTrack isn't implemented in Chrome, even via webrtc-adapter.
+            stream.removeTrack(sender.track);
+            stream.addTrack(t);
+            t.enabled = true;
+          }
+          newSenders.push(sender);
+        } else {
+          newSenders.push(this.publisher.conn.addTrack(t, stream));
+        }
+      });
+      existingSenders.forEach(s => {
+        if (!newSenders.includes(s)) {
+          s.track.enabled = false;
+        }
+      });
     }
-    // @TODO this should handle renegotiating the publisher connection if it has already been made
     this.localMediaStream = stream;
+    this.setMediaStream(this.userId, stream);
   }
 
   enableMicrophone(enabled) {
-    if (this.publisher && this.publisher.mediaStream) {
-      var audioTracks = this.publisher.mediaStream.getAudioTracks();
-
-      if (audioTracks.length > 0) {
-        audioTracks[0].enabled = enabled;
+    if (this.publisher && this.publisher.conn) {
+      for (var sender in this.publisher.conn.getSenders()) {
+        if (sender.track.kind == "audio") {
+          sender.track.enabled = enabled;
+        }
       }
     }
   }
