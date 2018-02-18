@@ -1,3 +1,4 @@
+import WebSocketClient from 'websocket.js';
 var mj = require("minijanus");
 var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
@@ -87,13 +88,21 @@ class JanusAdapter {
 
   connect() {
     debug(`connecting to ${this.serverUrl}`);
-    this.ws = new WebSocket(this.serverUrl, "janus-protocol");
-    this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
-    this.ws.addEventListener("open", this.onWebsocketOpen);
-    this.ws.addEventListener("message", this.onWebsocketMessage);
+    this.ws = new WebSocketClient(this.serverUrl, "janus-protocol", {
+      strategy: 'fibonacci',
+      randomisationFactor: 0, // defaults to 0, must be between 0 and 1
+      initialDelay: 1,       // defaults to 100 ms
+      maxDelay: 300           // defaults to 10000 ms
+    });
+    this.ws.onopen = (_) => {
+      this.onWebsocketOpen();
+    };
+    this.ws.onmessage =
+      this.onWebsocketMessage;
   }
 
   async onWebsocketOpen() {
+    this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
     await this.updateTimeOffset();
 
     // Create the Janus Session
@@ -444,4 +453,4 @@ class JanusAdapter {
 
 NAF.adapters.register("janus", JanusAdapter);
 
-module.exports = JanusAdapter;
+export default JanusAdapter;

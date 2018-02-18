@@ -17,6 +17,7 @@
     "webpack-merge": "^4.1.0"
   },
   "dependencies": {
+    "@gamestdio/websocket": "^0.2.2",
     "debug": "^3.1.0",
     "minijanus": "^0.4.0"
   },
