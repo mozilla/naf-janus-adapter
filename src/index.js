@@ -413,11 +413,11 @@ class JanusAdapter {
 
   enableMicrophone(enabled) {
     if (this.publisher && this.publisher.conn) {
-      for (var sender in this.publisher.conn.getSenders()) {
-        if (sender.track.kind == "audio") {
-          sender.track.enabled = enabled;
+      this.publisher.conn.getSenders().forEach(s => {
+        if (s.track.kind == "audio") {
+          s.track.enabled = enabled;
         }
-      }
+      });
     }
   }
 
