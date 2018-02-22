@@ -90,7 +90,7 @@ class JanusAdapter {
     debug(`connecting to ${this.serverUrl}`);
     this.ws = new WebSocketClient(this.serverUrl, "janus-protocol", {
       strategy: 'fibonacci',
-      initialDelay: 1,       // defaults to 100 ms
+      initialDelay: 1
     });
     this.ws.onopen = (_) => {
       this.onWebsocketOpen();
