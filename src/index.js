@@ -142,11 +142,9 @@ class JanusAdapter {
       }
 
       if (this.pendingMediaRequests.has(occupantId)) {
-        this.pendingMediaRequests
-          .get(occupantId)
-          .reject(
-            "The user disconnected before the media stream was resolved."
-          );
+        const msg = "The user disconnected before the media stream was resolved.";
+        this.pendingMediaRequests.get(occupantId).audio.reject(msg);
+        this.pendingMediaRequests.get(occupantId).video.reject(msg);
         this.pendingMediaRequests.delete(occupantId);
       }
 
@@ -202,7 +200,9 @@ class JanusAdapter {
     reliableChannel.addEventListener("message", this.onDataChannelMessage);
 
     if (this.localMediaStream) {
-      conn.addStream(this.localMediaStream);
+      this.localMediaStream.getTracks().forEach(track => {
+        conn.addTrack(track, this.localMediaStream);
+      });
     }
 
     debug("pub waiting for webrtcup");
@@ -268,9 +268,16 @@ class JanusAdapter {
     debug("sub waiting for webrtcup");
     await new Promise(resolve => handle.on("webrtcup", resolve));
 
-    // Get the occupant's audio stream.
-    var streams = conn.getRemoteStreams();
-    var mediaStream = streams.length > 0 ? streams[0] : null;
+    var mediaStream = new MediaStream();
+    var receivers = conn.getReceivers();
+    receivers.forEach(receiver => {
+      if (receiver.track) {
+        mediaStream.addTrack(receiver.track);
+      }
+    });
+    if (mediaStream.getTracks().length === 0) {
+      mediaStream = null;
+    }
 
     debug("subscriber ready");
     return {
@@ -348,28 +355,43 @@ class JanusAdapter {
     return Date.now() + this.avgTimeOffset;
   }
 
-  getMediaStream(clientId) {
+  getMediaStream(clientId, type = 'audio') {
     if (this.mediaStreams[clientId]) {
-      debug("Already had audio for " + clientId);
-      return Promise.resolve(this.mediaStreams[clientId]);
+      debug(`Already had ${type} for ${clientId}`);
+      return Promise.resolve(this.mediaStreams[clientId][type]);
     } else {
-      debug("Waiting on audio for " + clientId);
+      debug(`Waiting on ${type} for ${clientId}`);
       if (!this.pendingMediaRequests.has(clientId)) {
-        const promise = new Promise((resolve, reject) => {
-          this.pendingMediaRequests.set(clientId, { resolve, reject });
+        this.pendingMediaRequests.set(clientId, {});
+
+        const audioPromise = new Promise((resolve, reject) => {
+          this.pendingMediaRequests.get(clientId).audio = { resolve, reject };
         });
-        this.pendingMediaRequests.get(clientId).promise = promise;
+        const videoPromise = new Promise((resolve, reject) => {
+          this.pendingMediaRequests.get(clientId).video = { resolve, reject };
+        });
+
+        this.pendingMediaRequests.get(clientId).audio.promise = audioPromise;
+        this.pendingMediaRequests.get(clientId).video.promise = videoPromise;
       }
-      return this.pendingMediaRequests.get(clientId).promise;
+      return this.pendingMediaRequests.get(clientId)[type].promise;
     }
   }
 
   setMediaStream(clientId, stream) {
-    this.mediaStreams[clientId] = stream;
+    // Safari doesn't like it when you use single a mixed media stream where one of the tracks is inactive, so we
+    // split the tracks into two streams.
+    const audioStream = new MediaStream();
+    stream.getAudioTracks().forEach(track => audioStream.addTrack(track));
+    const videoStream = new MediaStream();
+    stream.getVideoTracks().forEach(track => videoStream.addTrack(track));
+
+    this.mediaStreams[clientId] = { audio: audioStream, video: videoStream };
 
     // Resolve the promise for the user's media stream if it exists.
     if (this.pendingMediaRequests.has(clientId)) {
-      this.pendingMediaRequests.get(clientId).resolve(stream);
+      this.pendingMediaRequests.get(clientId).audio.resolve(audioStream);
+      this.pendingMediaRequests.get(clientId).video.resolve(videoStream);
     }
   }
 
