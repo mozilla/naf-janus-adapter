@@ -95,7 +95,7 @@ class JanusAdapter {
 
   disconnect() {
     debug(`disconnecting`);
-    removeAllOccupants();
+    this.removeAllOccupants();
 
     if (this.ws) {
       this.ws.close();
