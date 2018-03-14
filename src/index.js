@@ -93,6 +93,15 @@ class JanusAdapter {
     this.ws.addEventListener("message", this.onWebsocketMessage);
   }
 
+  disconnect() {
+    debug(`disconnecting`);
+    removeAllOccupants();
+
+    if (this.ws) {
+      this.ws.close();
+    }
+  }
+
   async onWebsocketOpen() {
     await this.updateTimeOffset();
 
@@ -127,6 +136,12 @@ class JanusAdapter {
     this.onOccupantsChanged(this.occupants);
 
     return subscriber;
+  }
+
+  removeAllOccupants() {
+    for (const occupantId of this.occupants) {
+      this.removeOccupant(occupantId);
+    }
   }
 
   removeOccupant(occupantId) {
