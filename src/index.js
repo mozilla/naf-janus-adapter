@@ -139,7 +139,7 @@ class JanusAdapter {
   }
 
   removeAllOccupants() {
-    for (const occupantId of this.occupants) {
+    for (const occupantId of Object.getOwnPropertyNames(this.occupants)) {
       this.removeOccupant(occupantId);
     }
   }
