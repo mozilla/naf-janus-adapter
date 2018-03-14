@@ -1,6 +1,6 @@
 {
   "name": "naf-janus-adapter",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "networked-aframe Janus network adapter",
   "main": "src/index.js",
   "license": "MPL-2.0",
@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "debug": "^3.1.0",
-    "minijanus": "^0.4.0"
+    "minijanus": "https://github.com/mozilla/minijanus#master"
   },
   "resolutions": {
     "webpack-sources": "1.0.1"
