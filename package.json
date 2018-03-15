@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "debug": "^3.1.0",
-    "minijanus": "https://github.com/mozilla/minijanus.js#master"
+    "minijanus": "^0.5.0"
   },
   "resolutions": {
     "webpack-sources": "1.0.1"
