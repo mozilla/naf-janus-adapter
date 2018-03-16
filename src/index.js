@@ -91,11 +91,35 @@ class JanusAdapter {
     this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
     this.ws.addEventListener("open", this.onWebsocketOpen);
     this.ws.addEventListener("message", this.onWebsocketMessage);
+    this.updateTimeOffset();
+  }
+
+  disconnect() {
+    debug(`disconnecting`);
+
+    this.removeAllOccupants();
+
+    if (this.publisher) {
+      this.destroyPublisher(this.publisher);
+      this.publisher = null;
+    }
+
+    if (this.session) {
+      this.session.destroy();
+      this.session = null;
+    }
+
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+
+  isDisconnected() {
+    return this.ws === null;
   }
 
   async onWebsocketOpen() {
-    await this.updateTimeOffset();
-
     // Create the Janus Session
     await this.session.create();
 
@@ -127,6 +151,12 @@ class JanusAdapter {
     this.onOccupantsChanged(this.occupants);
 
     return subscriber;
+  }
+
+  removeAllOccupants() {
+    for (const occupantId of Object.getOwnPropertyNames(this.occupants)) {
+      this.removeOccupant(occupantId);
+    }
   }
 
   removeOccupant(occupantId) {
@@ -233,6 +263,15 @@ class JanusAdapter {
     };
   }
 
+  destroyPublisher(publisher) {
+    debug(`destroying publisher`);
+
+    const { handle, conn } = publisher;
+
+    handle.detach();
+    conn.close();
+  }
+
   configureSubscriberSdp(originalSdp) {
     if (!isH264VideoSupported) {
       return originalSdp;
@@ -317,6 +356,8 @@ class JanusAdapter {
   }
 
   async updateTimeOffset() {
+    if (this.isDisconnected()) return;
+
     const clientSentTime = Date.now();
 
     const res = await fetch(document.location.href, {
@@ -345,6 +386,7 @@ class JanusAdapter {
       this.timeOffsets.length;
 
     if (this.serverTimeRequests > 10) {
+      debug(`new server time offset: ${this.avgTimeOffset}ms`);
       setTimeout(() => this.updateTimeOffset(), 5 * 60 * 1000); // Sync clock every 5 minutes.
     } else {
       this.updateTimeOffset();
