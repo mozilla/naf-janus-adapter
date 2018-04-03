@@ -33,3 +33,9 @@ naf-janus-adapter should support anything that supports recent WebRTC standards 
 </body>
 </html>
 ```
+
+## Development
+
+- Dev: `yarn run start`
+- Build: `yarn run build`
+- Release: `yarn run release`
