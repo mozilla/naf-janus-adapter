@@ -366,12 +366,16 @@ class JanusAdapter {
     });
 
     const precision = 1000;
-    const serverReceivedTime =
-      new Date(res.headers.get("Date")).getTime() + precision / 2;
-    const clientReceivedTime = Date.now();
-    const serverTime =
-      serverReceivedTime + (clientReceivedTime - clientSentTime) / 2;
-    const timeOffset = serverTime - clientReceivedTime;
+    const serverDate = res.headers.get("Date");
+    let timeOffset = 0;
+    if (serverDate) {
+      const serverReceivedTime =
+        new Date(serverDate).getTime() + precision / 2;
+      const clientReceivedTime = Date.now();
+      const serverTime =
+        serverReceivedTime + (clientReceivedTime - clientSentTime) / 2;
+      timeOffset = serverTime - clientReceivedTime;
+    }
 
     this.serverTimeRequests++;
 
