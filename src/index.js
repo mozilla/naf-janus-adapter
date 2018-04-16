@@ -245,6 +245,14 @@ class JanusAdapter {
         this.addOccupant(data.user_id);
       } else if (data.event == "leave" && data.room_id == this.room) {
         this.removeOccupant(data.user_id);
+      } else if (data.event == "blocked") {
+        document.body.dispatchEvent(
+          new CustomEvent("blocked", { detail: { by: data.by } })
+        );
+      } else if (data.event == "unblocked") {
+        document.body.dispatchEvent(
+          new CustomEvent("unblocked", { detail: { by: data.by } })
+        );
       }
     });
 
