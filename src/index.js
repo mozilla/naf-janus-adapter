@@ -27,10 +27,6 @@ const PEER_CONNECTION_CONFIG = {
   ]
 };
 
-// In the event the server restarts and all clients lose connection, reconnect with
-// some random jitter added to prevent simultaneous reconnection requests.
-const INITIAL_RECONNECTION_DELAY = 1000 * Math.random();
-
 class JanusAdapter {
   constructor() {
     this.room = null;
@@ -41,8 +37,13 @@ class JanusAdapter {
     this.ws = null;
     this.session = null;
 
-    this.reconnectionDelay = INITIAL_RECONNECTION_DELAY;
+    // In the event the server restarts and all clients lose connection, reconnect with
+    // some random jitter added to prevent simultaneous reconnection requests.
+    this.initialReconnectionDelay = 1000 * Math.random();
+    this.reconnectionDelay = this.initialReconnectionDelay;
     this.reconnectionTimeout = null;
+    this.maxReconnectionAttempts = 10;
+    this.reconnectionAttempts = 0;
 
     this.publisher = null;
     this.occupants = {};
@@ -91,6 +92,15 @@ class JanusAdapter {
     this.onOccupantConnected = openListener;
     this.onOccupantDisconnected = closedListener;
     this.onOccupantMessage = messageListener;
+  }
+
+  setReconnectionListeners(reconnectingListener, reconnectedListener, reconnectionErrorListener) {
+    // onReconnecting is called with the number of milliseconds until the next reconnection attempt
+    this.onReconnecting = reconnectingListener;
+    // onReconnected is called when the connection has been reestablished
+    this.onReconnected = reconnectedListener;
+    // onReconnectionError is called with an error when maxReconnectionAttempts has been reached
+    this.onReconnectionError = reconnectionErrorListener;
   }
 
   connect() {
@@ -177,6 +187,10 @@ class JanusAdapter {
       return;
     }
 
+    if (this.onReconnecting) {
+      this.onReconnecting(this.reconnectionDelay);
+    }
+
     this.reconnectionTimeout = setTimeout(() => this.reconnect(), this.reconnectionDelay);
   }
 
@@ -186,10 +200,25 @@ class JanusAdapter {
 
     this.connect()
       .then(() => {
-        this.reconnectionDelay = INITIAL_RECONNECTION_DELAY;
+        this.reconnectionDelay = this.initialReconnectionDelay;
+        this.reconnectionAttempts = 0;
+
+        if (this.onReconnected) {
+          this.onReconnected();
+        }
       })
       .catch((error) => {
         this.reconnectionDelay += 1000;
+        this.reconnectionAttempts++;
+
+        if (this.reconnectionAttempts > this.maxReconnectionAttempts && this.onReconnectionError) {
+          return this.onReconnectionError(new Error("Connection could not be reestablished, exceeded maximum number of reconnection attempts."));
+        }
+
+        if (this.onReconnecting) {
+          this.onReconnecting(this.reconnectionDelay);
+        }
+
         this.reconnectionTimeout = setTimeout(() => this.reconnect(), this.reconnectionDelay);
       });
   }
