@@ -30,7 +30,7 @@ const PEER_CONNECTION_CONFIG = {
 class JanusAdapter {
   constructor() {
     this.room = null;
-    this.userId = randomUint();
+    this.userId = String(randomUint());
 
     this.serverUrl = null;
     this.webRtcOptions = {};
