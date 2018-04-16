@@ -89,9 +89,15 @@ class JanusAdapter {
     debug(`connecting to ${this.serverUrl}`);
     this.ws = new WebSocket(this.serverUrl, "janus-protocol");
     this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
-    this.ws.addEventListener("open", this.onWebsocketOpen);
     this.ws.addEventListener("message", this.onWebsocketMessage);
-    this.updateTimeOffset();
+    return Promise.all([
+      new Promise((resolve, reject) => {
+        this.ws.addEventListener("open", () => {
+          this.onWebsocketOpen().then(resolve).catch(reject);
+        });
+      }),
+      this.updateTimeOffset()
+    ]);
   }
 
   disconnect() {
