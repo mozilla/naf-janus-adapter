@@ -27,6 +27,10 @@ const PEER_CONNECTION_CONFIG = {
   ]
 };
 
+// In the event the server restarts and all clients lose connection, reconnect with
+// some random jitter added to prevent simultaneous reconnection requests.
+const INITIAL_RECONNECTION_DELAY = 1000 * Math.random();
+
 class JanusAdapter {
   constructor() {
     this.room = null;
@@ -36,6 +40,9 @@ class JanusAdapter {
     this.webRtcOptions = {};
     this.ws = null;
     this.session = null;
+
+    this.reconnectionDelay = INITIAL_RECONNECTION_DELAY;
+    this.reconnectionTimeout = null;
 
     this.publisher = null;
     this.occupants = {};
@@ -48,6 +55,7 @@ class JanusAdapter {
     this.avgTimeOffset = 0;
 
     this.onWebsocketOpen = this.onWebsocketOpen.bind(this);
+    this.onWebsocketClose = this.onWebsocketClose.bind(this);
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
   }
@@ -87,15 +95,40 @@ class JanusAdapter {
 
   connect() {
     debug(`connecting to ${this.serverUrl}`);
+
+    const websocketConnection = new Promise((resolve, reject) => {
     this.ws = new WebSocket(this.serverUrl, "janus-protocol");
+
     this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
-    this.ws.addEventListener("open", this.onWebsocketOpen);
-    this.ws.addEventListener("message", this.onWebsocketMessage);
-    this.updateTimeOffset();
+
+      let onOpen;
+
+      const onError = () => {
+        reject(error);
+      };
+
+      this.ws.addEventListener("close", this.onWebsocketClose);
+      this.ws.addEventListener("message", this.onWebsocketMessage);
+      
+      onOpen = () => {
+        this.ws.removeEventListener("open", onOpen);
+        this.ws.removeEventListener("error", onError);
+        this.onWebsocketOpen().then(resolve).catch(reject);
+      };
+
+      this.ws.addEventListener("open", onOpen);
+    });
+
+    return Promise.all([
+      websocketConnection,
+      this.updateTimeOffset()
+    ]);
   }
 
   disconnect() {
     debug(`disconnecting`);
+
+    clearTimeout(this.reconnectionTimeout);
 
     this.removeAllOccupants();
 
@@ -110,6 +143,9 @@ class JanusAdapter {
     }
 
     if (this.ws) {
+      this.ws.removeEventListener("open", this.onWebsocketOpen);
+      this.ws.removeEventListener("close", this.onWebsocketClose);
+      this.ws.removeEventListener("message", this.onWebsocketMessage);
       this.ws.close();
       this.ws = null;
     }
@@ -133,6 +169,29 @@ class JanusAdapter {
 
     // Add all of the initial occupants.
     await Promise.all(this.publisher.initialOccupants.map(this.addOccupant.bind(this)));
+  }
+
+  onWebsocketClose(event) {
+    // The connection was closed successfully. Don't try to reconnect.
+    if (event.code === 1000) {
+      return;
+    }
+
+    this.reconnectionTimeout = setTimeout(() => this.reconnect(), this.reconnectionDelay);
+  }
+
+  reconnect() {
+    // Dispose of all networked entities and other resources tied to the session.
+    this.disconnect();
+
+    this.connect()
+      .then(() => {
+        this.reconnectionDelay = INITIAL_RECONNECTION_DELAY;
+      })
+      .catch((error) => {
+        this.reconnectionDelay += 1000;
+        this.reconnectionTimeout = setTimeout(() => this.reconnect(), this.reconnectionDelay);
+      });
   }
 
   onWebsocketMessage(event) {
@@ -268,7 +327,11 @@ class JanusAdapter {
 
     const { handle, conn } = publisher;
 
-    handle.detach();
+    // Dont send detach event in closed/closing state
+    if (this.ws.readyState === this.ws.OPEN) {
+      handle.detach();
+    }
+    
     conn.close();
   }
 
@@ -486,23 +549,31 @@ class JanusAdapter {
   }
 
   sendData(clientId, dataType, data) {
-    this.publisher.unreliableChannel.send(
-      JSON.stringify({ clientId, dataType, data })
-    );
+    if (this.publisher) {
+      this.publisher.unreliableChannel.send(
+        JSON.stringify({ clientId, dataType, data })
+      );
+    }
   }
 
   sendDataGuaranteed(clientId, dataType, data) {
-    this.publisher.reliableChannel.send(
-      JSON.stringify({ clientId, dataType, data })
-    );
+    if (this.publisher) {
+      this.publisher.reliableChannel.send(
+        JSON.stringify({ clientId, dataType, data })
+      );
+    }
   }
 
   broadcastData(dataType, data) {
-    this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
+    if (this.publisher) {
+      this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
+    }
   }
 
   broadcastDataGuaranteed(dataType, data) {
-    this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
+    if (this.publisher) {
+      this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
+    }
   }
 }
 
