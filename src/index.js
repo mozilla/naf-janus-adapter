@@ -355,10 +355,12 @@ class JanusAdapter {
   }
 
   flushPendingUpdates() {
-    for (let [networkId, message] of this.frozenUpdates) {
-        if(!message.data.owner || this.occupants[message.data.owner]) { // ignore users who have disconnected since freezing, since their entities will have already been removed by NAF
-          this.onOccupantMessage(null, message.dataType, message.data);
-      }
+    for (const [networkId, message] of this.frozenUpdates) {
+      // ignore messages relating to users who have disconnected since freezing, their entities will have aleady been removed by NAF
+      // note that delete messages have no "owner" so we have to check for that as well
+      if(message.data.owner && !this.occupants[message.data.owner]) continue;
+
+      this.onOccupantMessage(null, message.dataType, message.data);
     }
     this.frozenUpdates.clear();
   }
