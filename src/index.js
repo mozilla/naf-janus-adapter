@@ -578,31 +578,39 @@ class JanusAdapter {
   }
 
   sendData(clientId, dataType, data) {
-    if (this.publisher) {
-      this.publisher.unreliableChannel.send(
-        JSON.stringify({ clientId, dataType, data })
-      );
+    if (!this.publisher) {
+      return console.warn("sendData called without a publisher");
     }
+
+    this.publisher.unreliableChannel.send(
+      JSON.stringify({ clientId, dataType, data })
+    );
   }
 
   sendDataGuaranteed(clientId, dataType, data) {
-    if (this.publisher) {
-      this.publisher.reliableChannel.send(
-        JSON.stringify({ clientId, dataType, data })
-      );
+    if (!this.publisher) {
+      return console.warn("sendDataGuaranteed called without a publisher");
     }
+
+    this.publisher.reliableChannel.send(
+      JSON.stringify({ clientId, dataType, data })
+    );
   }
 
   broadcastData(dataType, data) {
-    if (this.publisher) {
-      this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
+    if (!this.publisher) {
+      return console.warn("broadcastData called without a publisher");
     }
+
+    this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
   }
 
   broadcastDataGuaranteed(dataType, data) {
-    if (this.publisher) {
-      this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
+    if (!this.publisher) {
+      return console.warn("broadcastDataGuaranteed called without a publisher");
     }
+
+    this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
   }
 }
 
