@@ -337,6 +337,14 @@ class JanusAdapter {
     });
   }
 
+  toggleFreeze() {
+    if(this.frozen) {
+      this.unfreeze();
+    } else {
+      this.freeze();
+    }
+  }
+
   freeze() {
     this.frozen = true;
   }
@@ -370,7 +378,6 @@ class JanusAdapter {
 
       // Delete messages override any other messages for this entity
       if(message.dataType === "r") {
-        console.log("got delete message, overwriting", networkId)
         this.frozenUpdates.set(networkId, message);
       } else {
         // merge in component updates
