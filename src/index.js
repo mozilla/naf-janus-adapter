@@ -27,6 +27,8 @@ const PEER_CONNECTION_CONFIG = {
   ]
 };
 
+const WS_NORMAL_CLOSURE = 1000;
+
 class JanusAdapter {
   constructor() {
     this.room = null;
@@ -183,7 +185,7 @@ class JanusAdapter {
 
   onWebsocketClose(event) {
     // The connection was closed successfully. Don't try to reconnect.
-    if (event.code === 1000) {
+    if (event.code === WS_NORMAL_CLOSURE) {
       return;
     }
 
