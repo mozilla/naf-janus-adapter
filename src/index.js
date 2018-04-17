@@ -21,10 +21,7 @@ const isH264VideoSupported = (() => {
 })();
 
 const PEER_CONNECTION_CONFIG = {
-  iceServers: [
-    { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" }
-  ]
+  iceServers: [{ urls: "stun:stun1.l.google.com:19302" }, { urls: "stun:stun2.l.google.com:19302" }]
 };
 
 const WS_NORMAL_CLOSURE = 1000;
@@ -109,9 +106,9 @@ class JanusAdapter {
     debug(`connecting to ${this.serverUrl}`);
 
     const websocketConnection = new Promise((resolve, reject) => {
-    this.ws = new WebSocket(this.serverUrl, "janus-protocol");
+      this.ws = new WebSocket(this.serverUrl, "janus-protocol");
 
-    this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
+      this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
 
       let onOpen;
 
@@ -121,20 +118,19 @@ class JanusAdapter {
 
       this.ws.addEventListener("close", this.onWebsocketClose);
       this.ws.addEventListener("message", this.onWebsocketMessage);
-      
+
       onOpen = () => {
         this.ws.removeEventListener("open", onOpen);
         this.ws.removeEventListener("error", onError);
-        this.onWebsocketOpen().then(resolve).catch(reject);
+        this.onWebsocketOpen()
+          .then(resolve)
+          .catch(reject);
       };
 
       this.ws.addEventListener("open", onOpen);
     });
 
-    return Promise.all([
-      websocketConnection,
-      this.updateTimeOffset()
-    ]);
+    return Promise.all([websocketConnection, this.updateTimeOffset()]);
   }
 
   disconnect() {
@@ -145,12 +141,13 @@ class JanusAdapter {
     this.removeAllOccupants();
 
     if (this.publisher) {
-      this.destroyPublisher(this.publisher);
+      // Close the publisher peer connection. Which also detaches the plugin handle.
+      this.publisher.conn.close();
       this.publisher = null;
     }
 
     if (this.session) {
-      this.session.destroy();
+      this.session.dispose();
       this.session = null;
     }
 
@@ -209,12 +206,14 @@ class JanusAdapter {
           this.onReconnected();
         }
       })
-      .catch((error) => {
+      .catch(error => {
         this.reconnectionDelay += 1000;
         this.reconnectionAttempts++;
 
         if (this.reconnectionAttempts > this.maxReconnectionAttempts && this.onReconnectionError) {
-          return this.onReconnectionError(new Error("Connection could not be reestablished, exceeded maximum number of reconnection attempts."));
+          return this.onReconnectionError(
+            new Error("Connection could not be reestablished, exceeded maximum number of reconnection attempts.")
+          );
         }
 
         if (this.onReconnecting) {
@@ -282,25 +281,31 @@ class JanusAdapter {
     // we have to debounce these because janus gets angry if you send it a new SDP before it's finished processing an
     // existing SDP. maybe another, slightly more correct approach would be to not set the remote description until we
     // get the webrtcup event?
-    conn.addEventListener("negotiationneeded", debounce(ev => {
-      debug("Sending new offer for handle: %o", handle);
-      var offer = conn.createOffer();
-      var local = offer.then(o => conn.setLocalDescription(o));
-      var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
-      return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
-    }));
+    conn.addEventListener(
+      "negotiationneeded",
+      debounce(ev => {
+        debug("Sending new offer for handle: %o", handle);
+        var offer = conn.createOffer();
+        var local = offer.then(o => conn.setLocalDescription(o));
+        var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
+        return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
+      })
+    );
 
-    handle.on("event", debounce(ev => {
-      var jsep = ev.jsep;
-      if (jsep && jsep.type == "offer") {
-        debug("Accepting new offer for handle: %o", handle);
-        jsep.sdp = this.configureSubscriberSdp(jsep.sdp);
-        var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
-        var local = answer.then(a => conn.setLocalDescription(a));
-        var remote = answer.then(j => handle.sendJsep(j));
-        Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
-      }
-    }));
+    handle.on(
+      "event",
+      debounce(ev => {
+        var jsep = ev.jsep;
+        if (jsep && jsep.type == "offer") {
+          debug("Accepting new offer for handle: %o", handle);
+          jsep.sdp = this.configureSubscriberSdp(jsep.sdp);
+          var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
+          var local = answer.then(a => conn.setLocalDescription(a));
+          var remote = answer.then(j => handle.sendJsep(j));
+          Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
+        }
+      })
+    );
   }
 
   async createPublisher() {
@@ -312,7 +317,10 @@ class JanusAdapter {
     await handle.attach("janus.plugin.sfu");
 
     // Create an unreliable datachannel for sending and receiving component updates, etc.
-    var unreliableChannel = conn.createDataChannel("unreliable", { ordered: false, maxRetransmits: 0 });
+    var unreliableChannel = conn.createDataChannel("unreliable", {
+      ordered: false,
+      maxRetransmits: 0
+    });
     unreliableChannel.addEventListener("message", this.onDataChannelMessage);
 
     // Create a reliable datachannel for sending and recieving entity instantiations, etc.
@@ -340,7 +348,10 @@ class JanusAdapter {
 
     debug("pub waiting for join");
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
-    var message = await this.sendJoin(handle, { notifications: true, data: true });
+    var message = await this.sendJoin(handle, {
+      notifications: true,
+      data: true
+    });
     var initialOccupants = message.plugindata.data.response.users[this.room] || [];
 
     debug("publisher ready");
@@ -351,19 +362,6 @@ class JanusAdapter {
       unreliableChannel,
       conn
     };
-  }
-
-  destroyPublisher(publisher) {
-    debug(`destroying publisher`);
-
-    const { handle, conn } = publisher;
-
-    // Dont send detach event in closed/closing state
-    if (this.ws.readyState === this.ws.OPEN) {
-      handle.detach();
-    }
-    
-    conn.close();
   }
 
   configureSubscriberSdp(originalSdp) {
@@ -460,11 +458,9 @@ class JanusAdapter {
     });
 
     const precision = 1000;
-    const serverReceivedTime =
-      new Date(res.headers.get("Date")).getTime() + precision / 2;
+    const serverReceivedTime = new Date(res.headers.get("Date")).getTime() + precision / 2;
     const clientReceivedTime = Date.now();
-    const serverTime =
-      serverReceivedTime + (clientReceivedTime - clientSentTime) / 2;
+    const serverTime = serverReceivedTime + (clientReceivedTime - clientSentTime) / 2;
     const timeOffset = serverTime - clientReceivedTime;
 
     this.serverTimeRequests++;
@@ -475,9 +471,7 @@ class JanusAdapter {
       this.timeOffsets[this.serverTimeRequests % 10] = timeOffset;
     }
 
-    this.avgTimeOffset =
-      this.timeOffsets.reduce((acc, offset) => (acc += offset), 0) /
-      this.timeOffsets.length;
+    this.avgTimeOffset = this.timeOffsets.reduce((acc, offset) => (acc += offset), 0) / this.timeOffsets.length;
 
     if (this.serverTimeRequests > 10) {
       debug(`new server time offset: ${this.avgTimeOffset}ms`);
@@ -491,7 +485,7 @@ class JanusAdapter {
     return Date.now() + this.avgTimeOffset;
   }
 
-  getMediaStream(clientId, type = 'audio') {
+  getMediaStream(clientId, type = "audio") {
     if (this.mediaStreams[clientId]) {
       debug(`Already had ${type} for ${clientId}`);
       return Promise.resolve(this.mediaStreams[clientId][type]);
@@ -584,9 +578,7 @@ class JanusAdapter {
       return console.warn("sendData called without a publisher");
     }
 
-    this.publisher.unreliableChannel.send(
-      JSON.stringify({ clientId, dataType, data })
-    );
+    this.publisher.unreliableChannel.send(JSON.stringify({ clientId, dataType, data }));
   }
 
   sendDataGuaranteed(clientId, dataType, data) {
@@ -594,9 +586,7 @@ class JanusAdapter {
       return console.warn("sendDataGuaranteed called without a publisher");
     }
 
-    this.publisher.reliableChannel.send(
-      JSON.stringify({ clientId, dataType, data })
-    );
+    this.publisher.reliableChannel.send(JSON.stringify({ clientId, dataType, data }));
   }
 
   broadcastData(dataType, data) {

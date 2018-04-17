@@ -2636,7 +2636,7 @@ mimic-fn@^1.0.0:
 
 "minijanus@https://github.com/mozilla/minijanus.js#fix/destroy-session":
   version "0.5.0"
-  resolved "https://github.com/mozilla/minijanus.js#60a4f41345f579a3023bd7e0f9fa645dc23e074b"
+  resolved "https://github.com/mozilla/minijanus.js#95f0db5dba842591de4810b5604afdf7274192a7"
 
 minimalistic-assert@^1.0.0:
   version "1.0.0"
