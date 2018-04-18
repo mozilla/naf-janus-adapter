@@ -21,11 +21,10 @@ const isH264VideoSupported = (() => {
 })();
 
 const PEER_CONNECTION_CONFIG = {
-  iceServers: [
-    { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" }
-  ]
+  iceServers: [{ urls: "stun:stun1.l.google.com:19302" }, { urls: "stun:stun2.l.google.com:19302" }]
 };
+
+const WS_NORMAL_CLOSURE = 1000;
 
 class JanusAdapter {
   constructor() {
@@ -36,6 +35,14 @@ class JanusAdapter {
     this.webRtcOptions = {};
     this.ws = null;
     this.session = null;
+
+    // In the event the server restarts and all clients lose connection, reconnect with
+    // some random jitter added to prevent simultaneous reconnection requests.
+    this.initialReconnectionDelay = 1000 * Math.random();
+    this.reconnectionDelay = this.initialReconnectionDelay;
+    this.reconnectionTimeout = null;
+    this.maxReconnectionAttempts = 10;
+    this.reconnectionAttempts = 0;
 
     this.publisher = null;
     this.occupants = {};
@@ -48,6 +55,7 @@ class JanusAdapter {
     this.avgTimeOffset = 0;
 
     this.onWebsocketOpen = this.onWebsocketOpen.bind(this);
+    this.onWebsocketClose = this.onWebsocketClose.bind(this);
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
   }
@@ -85,31 +93,68 @@ class JanusAdapter {
     this.onOccupantMessage = messageListener;
   }
 
+  setReconnectionListeners(reconnectingListener, reconnectedListener, reconnectionErrorListener) {
+    // onReconnecting is called with the number of milliseconds until the next reconnection attempt
+    this.onReconnecting = reconnectingListener;
+    // onReconnected is called when the connection has been reestablished
+    this.onReconnected = reconnectedListener;
+    // onReconnectionError is called with an error when maxReconnectionAttempts has been reached
+    this.onReconnectionError = reconnectionErrorListener;
+  }
+
   connect() {
     debug(`connecting to ${this.serverUrl}`);
-    this.ws = new WebSocket(this.serverUrl, "janus-protocol");
-    this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
-    this.ws.addEventListener("open", this.onWebsocketOpen);
-    this.ws.addEventListener("message", this.onWebsocketMessage);
-    this.updateTimeOffset();
+
+    const websocketConnection = new Promise((resolve, reject) => {
+      this.ws = new WebSocket(this.serverUrl, "janus-protocol");
+
+      this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
+
+      let onOpen;
+
+      const onError = () => {
+        reject(error);
+      };
+
+      this.ws.addEventListener("close", this.onWebsocketClose);
+      this.ws.addEventListener("message", this.onWebsocketMessage);
+
+      onOpen = () => {
+        this.ws.removeEventListener("open", onOpen);
+        this.ws.removeEventListener("error", onError);
+        this.onWebsocketOpen()
+          .then(resolve)
+          .catch(reject);
+      };
+
+      this.ws.addEventListener("open", onOpen);
+    });
+
+    return Promise.all([websocketConnection, this.updateTimeOffset()]);
   }
 
   disconnect() {
     debug(`disconnecting`);
 
+    clearTimeout(this.reconnectionTimeout);
+
     this.removeAllOccupants();
 
     if (this.publisher) {
-      this.destroyPublisher(this.publisher);
+      // Close the publisher peer connection. Which also detaches the plugin handle.
+      this.publisher.conn.close();
       this.publisher = null;
     }
 
     if (this.session) {
-      this.session.destroy();
+      this.session.dispose();
       this.session = null;
     }
 
     if (this.ws) {
+      this.ws.removeEventListener("open", this.onWebsocketOpen);
+      this.ws.removeEventListener("close", this.onWebsocketClose);
+      this.ws.removeEventListener("message", this.onWebsocketMessage);
       this.ws.close();
       this.ws = null;
     }
@@ -133,6 +178,50 @@ class JanusAdapter {
 
     // Add all of the initial occupants.
     await Promise.all(this.publisher.initialOccupants.map(this.addOccupant.bind(this)));
+  }
+
+  onWebsocketClose(event) {
+    // The connection was closed successfully. Don't try to reconnect.
+    if (event.code === WS_NORMAL_CLOSURE) {
+      return;
+    }
+
+    if (this.onReconnecting) {
+      this.onReconnecting(this.reconnectionDelay);
+    }
+
+    this.reconnectionTimeout = setTimeout(() => this.reconnect(), this.reconnectionDelay);
+  }
+
+  reconnect() {
+    // Dispose of all networked entities and other resources tied to the session.
+    this.disconnect();
+
+    this.connect()
+      .then(() => {
+        this.reconnectionDelay = this.initialReconnectionDelay;
+        this.reconnectionAttempts = 0;
+
+        if (this.onReconnected) {
+          this.onReconnected();
+        }
+      })
+      .catch(error => {
+        this.reconnectionDelay += 1000;
+        this.reconnectionAttempts++;
+
+        if (this.reconnectionAttempts > this.maxReconnectionAttempts && this.onReconnectionError) {
+          return this.onReconnectionError(
+            new Error("Connection could not be reestablished, exceeded maximum number of reconnection attempts.")
+          );
+        }
+
+        if (this.onReconnecting) {
+          this.onReconnecting(this.reconnectionDelay);
+        }
+
+        this.reconnectionTimeout = setTimeout(() => this.reconnect(), this.reconnectionDelay);
+      });
   }
 
   onWebsocketMessage(event) {
@@ -192,25 +281,31 @@ class JanusAdapter {
     // we have to debounce these because janus gets angry if you send it a new SDP before it's finished processing an
     // existing SDP. maybe another, slightly more correct approach would be to not set the remote description until we
     // get the webrtcup event?
-    conn.addEventListener("negotiationneeded", debounce(ev => {
-      debug("Sending new offer for handle: %o", handle);
-      var offer = conn.createOffer();
-      var local = offer.then(o => conn.setLocalDescription(o));
-      var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
-      return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
-    }));
+    conn.addEventListener(
+      "negotiationneeded",
+      debounce(ev => {
+        debug("Sending new offer for handle: %o", handle);
+        var offer = conn.createOffer();
+        var local = offer.then(o => conn.setLocalDescription(o));
+        var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
+        return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
+      })
+    );
 
-    handle.on("event", debounce(ev => {
-      var jsep = ev.jsep;
-      if (jsep && jsep.type == "offer") {
-        debug("Accepting new offer for handle: %o", handle);
-        jsep.sdp = this.configureSubscriberSdp(jsep.sdp);
-        var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
-        var local = answer.then(a => conn.setLocalDescription(a));
-        var remote = answer.then(j => handle.sendJsep(j));
-        Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
-      }
-    }));
+    handle.on(
+      "event",
+      debounce(ev => {
+        var jsep = ev.jsep;
+        if (jsep && jsep.type == "offer") {
+          debug("Accepting new offer for handle: %o", handle);
+          jsep.sdp = this.configureSubscriberSdp(jsep.sdp);
+          var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
+          var local = answer.then(a => conn.setLocalDescription(a));
+          var remote = answer.then(j => handle.sendJsep(j));
+          Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
+        }
+      })
+    );
   }
 
   async createPublisher() {
@@ -222,7 +317,10 @@ class JanusAdapter {
     await handle.attach("janus.plugin.sfu");
 
     // Create an unreliable datachannel for sending and receiving component updates, etc.
-    var unreliableChannel = conn.createDataChannel("unreliable", { ordered: false, maxRetransmits: 0 });
+    var unreliableChannel = conn.createDataChannel("unreliable", {
+      ordered: false,
+      maxRetransmits: 0
+    });
     unreliableChannel.addEventListener("message", this.onDataChannelMessage);
 
     // Create a reliable datachannel for sending and recieving entity instantiations, etc.
@@ -250,7 +348,10 @@ class JanusAdapter {
 
     debug("pub waiting for join");
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
-    var message = await this.sendJoin(handle, { notifications: true, data: true });
+    var message = await this.sendJoin(handle, {
+      notifications: true,
+      data: true
+    });
     var initialOccupants = message.plugindata.data.response.users[this.room] || [];
 
     debug("publisher ready");
@@ -261,15 +362,6 @@ class JanusAdapter {
       unreliableChannel,
       conn
     };
-  }
-
-  destroyPublisher(publisher) {
-    debug(`destroying publisher`);
-
-    const { handle, conn } = publisher;
-
-    handle.detach();
-    conn.close();
   }
 
   configureSubscriberSdp(originalSdp) {
@@ -366,11 +458,9 @@ class JanusAdapter {
     });
 
     const precision = 1000;
-    const serverReceivedTime =
-      new Date(res.headers.get("Date")).getTime() + precision / 2;
+    const serverReceivedTime = new Date(res.headers.get("Date")).getTime() + precision / 2;
     const clientReceivedTime = Date.now();
-    const serverTime =
-      serverReceivedTime + (clientReceivedTime - clientSentTime) / 2;
+    const serverTime = serverReceivedTime + (clientReceivedTime - clientSentTime) / 2;
     const timeOffset = serverTime - clientReceivedTime;
 
     this.serverTimeRequests++;
@@ -381,9 +471,7 @@ class JanusAdapter {
       this.timeOffsets[this.serverTimeRequests % 10] = timeOffset;
     }
 
-    this.avgTimeOffset =
-      this.timeOffsets.reduce((acc, offset) => (acc += offset), 0) /
-      this.timeOffsets.length;
+    this.avgTimeOffset = this.timeOffsets.reduce((acc, offset) => (acc += offset), 0) / this.timeOffsets.length;
 
     if (this.serverTimeRequests > 10) {
       debug(`new server time offset: ${this.avgTimeOffset}ms`);
@@ -397,7 +485,7 @@ class JanusAdapter {
     return Date.now() + this.avgTimeOffset;
   }
 
-  getMediaStream(clientId, type = 'audio') {
+  getMediaStream(clientId, type = "audio") {
     if (this.mediaStreams[clientId]) {
       debug(`Already had ${type} for ${clientId}`);
       return Promise.resolve(this.mediaStreams[clientId][type]);
@@ -486,22 +574,34 @@ class JanusAdapter {
   }
 
   sendData(clientId, dataType, data) {
-    this.publisher.unreliableChannel.send(
-      JSON.stringify({ clientId, dataType, data })
-    );
+    if (!this.publisher) {
+      return console.warn("sendData called without a publisher");
+    }
+
+    this.publisher.unreliableChannel.send(JSON.stringify({ clientId, dataType, data }));
   }
 
   sendDataGuaranteed(clientId, dataType, data) {
-    this.publisher.reliableChannel.send(
-      JSON.stringify({ clientId, dataType, data })
-    );
+    if (!this.publisher) {
+      return console.warn("sendDataGuaranteed called without a publisher");
+    }
+
+    this.publisher.reliableChannel.send(JSON.stringify({ clientId, dataType, data }));
   }
 
   broadcastData(dataType, data) {
+    if (!this.publisher) {
+      return console.warn("broadcastData called without a publisher");
+    }
+
     this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
   }
 
   broadcastDataGuaranteed(dataType, data) {
+    if (!this.publisher) {
+      return console.warn("broadcastDataGuaranteed called without a publisher");
+    }
+
     this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
   }
 }
