@@ -50,6 +50,8 @@ class JanusAdapter {
     this.localMediaStream = null;
     this.pendingMediaRequests = new Map();
 
+    this.frozenUpdates = new Map();
+
     this.timeOffsets = [];
     this.serverTimeRequests = 0;
     this.avgTimeOffset = 0;
@@ -427,10 +429,65 @@ class JanusAdapter {
     });
   }
 
+  toggleFreeze() {
+    if(this.frozen) {
+      this.unfreeze();
+    } else {
+      this.freeze();
+    }
+  }
+
+  freeze() {
+    this.frozen = true;
+  }
+
+  unfreeze() {
+    this.frozen = false;
+    this.flushPendingUpdates();
+  }
+
+  flushPendingUpdates() {
+    for (const [networkId, message] of this.frozenUpdates) {
+      // ignore messages relating to users who have disconnected since freezing, their entities will have aleady been removed by NAF
+      // note that delete messages have no "owner" so we have to check for that as well
+      if(message.data.owner && !this.occupants[message.data.owner]) continue;
+
+      this.onOccupantMessage(null, message.dataType, message.data);
+    }
+    this.frozenUpdates.clear();
+  }
+
+  storeMessage(message) {
+    const networkId = message.data.networkId;
+    if(!this.frozenUpdates.has(networkId)) {
+      this.frozenUpdates.set(networkId, message);
+    } else {
+      const storedMessage = this.frozenUpdates.get(networkId);
+
+      // Avoid updating components if the entity data received did not come from the current owner.
+      if (message.data.lastOwnerTime < storedMessage.data.lastOwnerTime ||
+            (storedMessage.data.lastOwnerTime === message.data.lastOwnerTime && storedMessage.data.owner > message.data.owner)) {
+        return;
+      }
+
+      // Delete messages override any other messages for this entity
+      if(message.dataType === "r") {
+        this.frozenUpdates.set(networkId, message);
+      } else {
+        // merge in component updates
+        Object.assign(storedMessage.data.components, message.data.components);
+      }
+    }
+  }
+
   onDataChannelMessage(event) {
     var message = JSON.parse(event.data);
 
-    if (message.dataType) {
+    if(!message.dataType) return;
+
+    if(this.frozen) {
+      this.storeMessage(message);
+    } else {
       this.onOccupantMessage(null, message.dataType, message.data);
     }
   }
