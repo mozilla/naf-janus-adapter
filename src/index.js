@@ -354,6 +354,11 @@ class JanusAdapter {
       notifications: true,
       data: true
     });
+
+    if (!message.plugindata.data.success) {
+      throw message.plugindata.data.error;
+    }
+
     var initialOccupants = message.plugindata.data.response.users[this.room] || [];
 
     debug("publisher ready");
