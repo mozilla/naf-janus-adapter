@@ -356,7 +356,9 @@ class JanusAdapter {
     });
 
     if (!message.plugindata.data.success) {
-      throw message.plugindata.data.error;
+      const err = message.plugindata.data.error;
+      console.error(err);
+      throw err;
     }
 
     var initialOccupants = message.plugindata.data.response.users[this.room] || [];
