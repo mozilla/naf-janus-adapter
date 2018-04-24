@@ -345,6 +345,14 @@ class JanusAdapter {
         this.addOccupant(data.user_id);
       } else if (data.event == "leave" && data.room_id == this.room) {
         this.removeOccupant(data.user_id);
+      } else if (data.event == "blocked") {
+        document.body.dispatchEvent(
+          new CustomEvent("blocked", { detail: { clientId: data.by } })
+        );
+      } else if (data.event == "unblocked") {
+        document.body.dispatchEvent(
+          new CustomEvent("unblocked", { detail: { clientId: data.by } })
+        );
       }
     });
 
@@ -660,6 +668,22 @@ class JanusAdapter {
     }
 
     this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
+  }
+
+  block(clientId){
+    return this.publisher.handle.sendMessage({ kind: "block", whom: clientId }).then(()=>{
+      document.body.dispatchEvent(
+        new CustomEvent("blocked", { detail: { clientId: clientId } })
+      );
+    });
+  }
+
+  unblock(clientId){
+    return this.publisher.handle.sendMessage({ kind: "unblock", whom: clientId }).then(()=>{
+      document.body.dispatchEvent(
+        new CustomEvent("unblocked", { detail: { clientId: clientId } })
+      );
+    });
   }
 }
 
