@@ -69,11 +69,7 @@ class JanusAdapter {
   setApp(app) {}
 
   setRoom(roomName) {
-    try {
-      this.room = parseInt(roomName);
-    } catch (e) {
-      throw new Error("Room must be a positive integer.");
-    }
+    this.room = roomName;
   }
 
   setWebRtcOptions(options) {
