@@ -276,9 +276,10 @@ class JanusAdapter {
       handle.sendTrickle(ev.candidate || null).catch(e => error("Error trickling ICE: %o", e));
     });
 
-    // we have to debounce these because janus gets angry if you send it a new SDP before it's finished processing an
-    // existing SDP. maybe another, slightly more correct approach would be to not set the remote description until we
-    // get the webrtcup event?
+    // we have to debounce these because janus gets angry if you send it a new SDP before
+    // it's finished processing an existing SDP. in actuality, it seems like this is maybe
+    // too liberal and we need to wait some amount of time after an offer before sending another,
+    // but we don't currently know any good way of detecting exactly how long :(
     conn.addEventListener(
       "negotiationneeded",
       debounce(ev => {
@@ -289,7 +290,6 @@ class JanusAdapter {
         return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
       })
     );
-
     handle.on(
       "event",
       debounce(ev => {
@@ -309,30 +309,35 @@ class JanusAdapter {
   async createPublisher() {
     var handle = new mj.JanusPluginHandle(this.session);
     var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
-    this.associate(conn, handle);
 
     debug("pub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
 
-    // Create an unreliable datachannel for sending and receiving component updates, etc.
+    // Unreliable datachannel: sending and receiving component updates.
+    // Reliable datachannel: sending and recieving entity instantiations.
+    var reliableChannel = conn.createDataChannel("reliable", { ordered: true });
     var unreliableChannel = conn.createDataChannel("unreliable", {
       ordered: false,
       maxRetransmits: 0
     });
+    reliableChannel.addEventListener("message", this.onDataChannelMessage);
     unreliableChannel.addEventListener("message", this.onDataChannelMessage);
 
-    // Create a reliable datachannel for sending and recieving entity instantiations, etc.
-    var reliableChannel = conn.createDataChannel("reliable", { ordered: true });
-    reliableChannel.addEventListener("message", this.onDataChannelMessage);
+    this.associate(conn, handle);
 
+    debug("pub waiting for webrtcup");
+    await new Promise(resolve => handle.on("webrtcup", resolve));
+
+    // doing this here is sort of a hack around chrome renegotiation weirdness --
+    // if we do it prior to webrtcup, chrome on gear VR will sometimes put a
+    // renegotiation offer in flight while the first offer was still being
+    // processed by janus. we should find some more principled way to figure out
+    // when janus is done in the future.
     if (this.localMediaStream) {
       this.localMediaStream.getTracks().forEach(track => {
         conn.addTrack(track, this.localMediaStream);
       });
     }
-
-    debug("pub waiting for webrtcup");
-    await new Promise(resolve => handle.on("webrtcup", resolve));
 
     // Handle all of the join and leave events.
     handle.on("event", ev => {
@@ -399,10 +404,11 @@ class JanusAdapter {
   async createSubscriber(occupantId) {
     var handle = new mj.JanusPluginHandle(this.session);
     var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
-    this.associate(conn, handle);
 
     debug("sub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
+
+    this.associate(conn, handle);
 
     debug("sub waiting for join");
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's media.
