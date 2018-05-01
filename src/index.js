@@ -494,6 +494,7 @@ class JanusAdapter {
         // merge in component updates
         Object.assign(storedMessage.data.components, message.data.components);
       }
+      storedMessage.data.isFirstSync = storedMessage.data.isFirstSync || message.data.isFirstSync;
     }
   }
 
