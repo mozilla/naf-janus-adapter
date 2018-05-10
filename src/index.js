@@ -384,7 +384,12 @@ class JanusAdapter {
 
   configureSubscriberSdp(originalSdp) {
     if (!isH264VideoSupported) {
-      return originalSdp;
+      if (navigator.userAgent.indexOf("HeadlessChrome") !== -1) {
+        // HeadlessChrome (e.g. puppeteer) doesn't support webrtc video streams, so we remove those lines from the SDP.
+        return originalSdp.replace(/m=video[^]*m=/, "m=");
+      } else {
+        return originalSdp;
+      }
     }
 
     // TODO: Hack to get video working on Chrome for Android. https://groups.google.com/forum/#!topic/mozilla.dev.media/Ye29vuMTpo8
