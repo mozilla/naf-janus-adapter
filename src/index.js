@@ -505,6 +505,10 @@ class JanusAdapter {
   onDataChannelMessage(event) {
     var message = JSON.parse(event.data);
 
+    if (debug.enabled) {
+      debug(`DC in: ${event.data}`);
+    }
+
     if(!message.dataType) return;
 
     if(this.frozen) {
