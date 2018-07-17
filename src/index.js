@@ -290,16 +290,41 @@ class JanusAdapter {
         return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
       })
     );
+
+    // Need to keep track of the last incoming Jsep offer for this handle, and do not accept
+    // legacy offers if new offers come in while they are being processed.
+    let latestOfferedJsep = null;
+
     handle.on(
       "event",
       debounce(ev => {
-        var jsep = ev.jsep;
+        const jsep = ev.jsep;
         if (jsep && jsep.type == "offer") {
-          debug("Accepting new offer for handle: %o", handle);
+          debug("Saw new offer for handle: %o", handle);
+
           jsep.sdp = this.configureSubscriberSdp(jsep.sdp);
-          var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
-          var local = answer.then(a => conn.setLocalDescription(a));
-          var remote = answer.then(j => handle.sendJsep(j));
+          latestOfferedJsep = jsep;
+
+          const answer = conn.setRemoteDescription(jsep).then(_ => {
+            if (jsep === latestOfferedJsep) {
+              return conn.createAnswer();
+            }
+          });
+
+          const local = answer.then(a => {
+            if (jsep === latestOfferedJsep) {
+              return conn.setLocalDescription(a);
+            }
+          });
+
+          const remote = answer.then(a => {
+            if (jsep === latestOfferedJsep) {
+              debug("Accepting new offer for handle: %o", handle);
+              latestOfferedJsep = null;
+              return handle.sendJsep(a);
+            }
+          });
+
           Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
         }
       })
