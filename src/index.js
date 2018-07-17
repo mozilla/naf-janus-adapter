@@ -300,7 +300,9 @@ class JanusAdapter {
           var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
           var local = answer.then(a => conn.setLocalDescription(a));
           var remote = answer.then(j => handle.sendJsep(j));
-          Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
+          return Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
+        } else { // some other kind of event, nothing to do
+          return null;
         }
       })
     );
