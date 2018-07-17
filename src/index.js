@@ -24,6 +24,8 @@ const PEER_CONNECTION_CONFIG = {
   iceServers: [{ urls: "stun:stun1.l.google.com:19302" }, { urls: "stun:stun2.l.google.com:19302" }]
 };
 
+const TIMECHECK_SERVER_URL = "https://timecheck-prod.reticulum.io/index.html";
+
 const WS_NORMAL_CLOSURE = 1000;
 
 class JanusAdapter {
@@ -537,7 +539,7 @@ class JanusAdapter {
 
     const clientSentTime = Date.now();
 
-    const res = await fetch(document.location.href, {
+    const res = await fetch(TIMECHECK_SERVER_URL, {
       method: "HEAD",
       cache: "no-cache"
     });
