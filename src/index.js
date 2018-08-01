@@ -301,7 +301,8 @@ class JanusAdapter {
           var local = answer.then(a => conn.setLocalDescription(a));
           var remote = answer.then(j => handle.sendJsep(j));
           return Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
-        } else { // some other kind of event, nothing to do
+        } else {
+          // some other kind of event, nothing to do
           return null;
         }
       })
@@ -349,13 +350,9 @@ class JanusAdapter {
       } else if (data.event == "leave" && data.room_id == this.room) {
         this.removeOccupant(data.user_id);
       } else if (data.event == "blocked") {
-        document.body.dispatchEvent(
-          new CustomEvent("blocked", { detail: { clientId: data.by } })
-        );
+        document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: data.by } }));
       } else if (data.event == "unblocked") {
-        document.body.dispatchEvent(
-          new CustomEvent("unblocked", { detail: { clientId: data.by } })
-        );
+        document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: data.by } }));
       }
     });
 
@@ -454,7 +451,7 @@ class JanusAdapter {
   }
 
   toggleFreeze() {
-    if(this.frozen) {
+    if (this.frozen) {
       this.unfreeze();
     } else {
       this.freeze();
@@ -474,7 +471,7 @@ class JanusAdapter {
     for (const [networkId, message] of this.frozenUpdates) {
       // ignore messages relating to users who have disconnected since freezing, their entities will have aleady been removed by NAF
       // note that delete messages have no "owner" so we have to check for that as well
-      if(message.data.owner && !this.occupants[message.data.owner]) continue;
+      if (message.data.owner && !this.occupants[message.data.owner]) continue;
 
       this.onOccupantMessage(null, message.dataType, message.data);
     }
@@ -483,19 +480,20 @@ class JanusAdapter {
 
   storeMessage(message) {
     const networkId = message.data.networkId;
-    if(!this.frozenUpdates.has(networkId)) {
+    if (!this.frozenUpdates.has(networkId)) {
       this.frozenUpdates.set(networkId, message);
     } else {
       const storedMessage = this.frozenUpdates.get(networkId);
 
       // Avoid updating components if the entity data received did not come from the current owner.
-      if (message.data.lastOwnerTime < storedMessage.data.lastOwnerTime ||
-            (storedMessage.data.lastOwnerTime === message.data.lastOwnerTime && storedMessage.data.owner > message.data.owner)) {
+      const isOutdatedMessage = message.data.lastOwnerTime < storedMessage.data.lastOwnerTime;
+      const isContemporaneousMessage = message.data.lastOwnerTime === storedMessage.data.lastOwnerTime;
+      if (isOutdatedMessage || (isContemporaneousMessage && storedMessage.data.owner > message.data.owner)) {
         return;
       }
 
       // Delete messages override any other messages for this entity
-      if(message.dataType === "r") {
+      if (message.dataType === "r") {
         this.frozenUpdates.set(networkId, message);
       } else {
         // merge in component updates
@@ -511,9 +509,9 @@ class JanusAdapter {
       debug(`DC in: ${event.data}`);
     }
 
-    if(!message.dataType) return;
+    if (!message.dataType) return;
 
-    if(this.frozen) {
+    if (this.frozen) {
       this.storeMessage(message);
     } else {
       this.onOccupantMessage(null, message.dataType, message.data);
@@ -660,49 +658,45 @@ class JanusAdapter {
 
   sendData(clientId, dataType, data) {
     if (!this.publisher) {
-      return console.warn("sendData called without a publisher");
+      console.warn("sendData called without a publisher");
+    } else {
+      this.publisher.unreliableChannel.send(JSON.stringify({ clientId, dataType, data }));
     }
-
-    this.publisher.unreliableChannel.send(JSON.stringify({ clientId, dataType, data }));
   }
 
   sendDataGuaranteed(clientId, dataType, data) {
     if (!this.publisher) {
-      return console.warn("sendDataGuaranteed called without a publisher");
+      console.warn("sendDataGuaranteed called without a publisher");
+    } else {
+      this.publisher.reliableChannel.send(JSON.stringify({ clientId, dataType, data }));
     }
-
-    this.publisher.reliableChannel.send(JSON.stringify({ clientId, dataType, data }));
   }
 
   broadcastData(dataType, data) {
     if (!this.publisher) {
-      return console.warn("broadcastData called without a publisher");
+      console.warn("broadcastData called without a publisher");
+    } else {
+      this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
     }
-
-    this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
   }
 
   broadcastDataGuaranteed(dataType, data) {
     if (!this.publisher) {
-      return console.warn("broadcastDataGuaranteed called without a publisher");
+      console.warn("broadcastDataGuaranteed called without a publisher");
+    } else {
+      this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
     }
-
-    this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
   }
 
-  block(clientId){
-    return this.publisher.handle.sendMessage({ kind: "block", whom: clientId }).then(()=>{
-      document.body.dispatchEvent(
-        new CustomEvent("blocked", { detail: { clientId: clientId } })
-      );
+  block(clientId) {
+    return this.publisher.handle.sendMessage({ kind: "block", whom: clientId }).then(() => {
+      document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: clientId } }));
     });
   }
 
-  unblock(clientId){
-    return this.publisher.handle.sendMessage({ kind: "unblock", whom: clientId }).then(()=>{
-      document.body.dispatchEvent(
-        new CustomEvent("unblocked", { detail: { clientId: clientId } })
-      );
+  unblock(clientId) {
+    return this.publisher.handle.sendMessage({ kind: "unblock", whom: clientId }).then(() => {
+      document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: clientId } }));
     });
   }
 }
