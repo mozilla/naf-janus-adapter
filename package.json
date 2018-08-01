@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "debug": "^3.1.0",
-    "minijanus": "0.6.2"
+    "minijanus": "0.6.2",
+    "sdp": "^2.7.4"
   },
   "resolutions": {
     "webpack-sources": "1.0.1"
