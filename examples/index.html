@@ -5,34 +5,13 @@
   <title>Dev Example — naf-janus-adapter</title>
   <meta name="description" content="Dev Example — naf-janus-adapter">
 
-  <script src="https://aframe.io/releases/0.7.0/aframe.min.js"></script>
-  <!-- Tempoary custom version that includes NAF.adapters.register() -->
-  <script src="https://unpkg.com/networked-aframe@0.5.0/dist/networked-aframe.min.js"></script>
+  <script src="https://aframe.io/releases/0.8.2/aframe.min.js"></script>
+  <script src="https://rawgit.com/MozillaReality/networked-aframe/mr-social-client/master/dist/networked-aframe.js"></script>
   <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
   <script src="/dist/naf-janus-adapter.js"></script>
 
   <script src="https://unpkg.com/aframe-randomizer-components@^3.0.1/dist/aframe-randomizer-components.min.js"></script>
   <script src="https://unpkg.com/aframe-particle-system-component@1.0.5/dist/aframe-particle-system-component.min.js"></script>
-
-  <script>
-    // Define custom schema for syncing avatar color, set by random-color
-    NAF.schemas.add({
-      template: '#avatar-template',
-      components: [
-        'position',
-        'rotation',
-        {
-          selector: '.head',
-          component: 'material',
-          property: 'color'
-        }
-      ]
-    });
-    // Called by Networked-Aframe when connected to server
-    function onConnect() {
-      console.log("onConnect", new Date());
-    }
-  </script>
 </head>
 
 <body>
@@ -42,39 +21,36 @@
         debug: true;
         adapter: janus;
         connectOnLoad: true;
-        serverURL: wss://dev-janus.reticulum.io;
+        serverURL: wss://prod-janus.reticulum.io;
       ">
     <a-assets>
 
-      <img id="grid" src="https://img.gs/bbdkhfbzkk/stretch/https://i.imgur.com/25P1geh.png" crossorigin="anonymous">
-      <img id="sky" src="http://i.imgur.com/WqlqEkq.jpg" crossorigin="anonymous" />
+      <img id="grid" src="assets/grid.png" />
+      <img id="sky" src="assets/sky.jpg" />
 
       <!-- Templates -->
 
       <!-- Avatar -->
-      <script id="avatar-template" type="text/html">
-          <a-entity class="avatar" networked-audio-source>
-            <a-sphere class="head" color="#5985ff" scale="0.45 0.5 0.4" random-color></a-sphere>
-            <a-entity class="face" position="0 0.05 0">
-              <a-sphere class="eye" color="#efefef" position="0.16 0.1 -0.35" scale="0.12 0.12 0.12">
-                <a-sphere class="pupil" color="#000" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
-              </a-sphere>
-              <a-sphere class="eye" color="#efefef" position="-0.16 0.1 -0.35" scale="0.12 0.12 0.12">
-                <a-sphere class="pupil" color="#000" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
-              </a-sphere>
-            </a-entity>
+      <template id="avatar-template" type="text/html">
+        <a-entity class="avatar" networked-audio-source>
+          <a-sphere class="head" color="#5985ff" scale="0.45 0.5 0.4"></a-sphere>
+          <a-entity class="face" position="0 0.05 0">
+            <a-sphere class="eye" color="#efefef" position="0.16 0.1 -0.35" scale="0.12 0.12 0.12">
+              <a-sphere class="pupil" color="#000" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
+            </a-sphere>
+            <a-sphere class="eye" color="#efefef" position="-0.16 0.1 -0.35" scale="0.12 0.12 0.12">
+              <a-sphere class="pupil" color="#000" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
+            </a-sphere>
           </a-entity>
-        </script>
-
-      <script id="simple" type="text/html">
-          <a-sphere></a-sphere>
-        </script>
+        </a-entity>
+      </template>
 
       <!-- /Templates -->
     </a-assets>
 
-    <a-entity id="player" networked="template:#avatar-template;showLocalTemplate:false;" camera="userHeight: 1.6" wasd-controls
+    <a-entity id="player" networked="template:#avatar-template;attachTemplateToLocal:false;" camera position="0 1.6 0" wasd-controls
       look-controls>
+      <a-entity class="head" random-color></a-entity>
     </a-entity>
 
     <a-entity position="0 0 0" geometry="primitive: plane; width: 10000; height: 10000;" rotation="-90 0 0" material="src: #grid; repeat: 10000 10000; transparent: true; metalness:0.6; roughness: 0.4; sphericalEnvMap: #sky;"></a-entity>
@@ -140,6 +116,26 @@
     }).catch(err => {
       console.warn("Microphone access not allowed. This client will not broadcast audio.");
     })
+  </script>
+
+  <script>
+    // Define custom schema for syncing avatar color, set by random-color
+    NAF.schemas.add({
+      template: '#avatar-template',
+      components: [
+        'position',
+        'rotation',
+        {
+          selector: '.head',
+          component: 'material',
+          property: 'color'
+        }
+      ]
+    });
+    // Called by Networked-Aframe when connected to server
+    function onConnect() {
+      console.log("onConnect", new Date());
+    }
   </script>
 </body>
 
