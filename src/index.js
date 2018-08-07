@@ -389,8 +389,8 @@ class JanusAdapter {
     });
 
     // HACK this needs to be dug into by mquander, if this sleep is not done
-    // then in Chrome the initial incoming data channel messages are not received
-    // by other peers with some probability.
+    // then in Chrome the initial incoming data channel sync messages are not received
+    // from other NAF peers with some probability.
     await hackForRaceCondition();
 
     debug("pub waiting for join");
