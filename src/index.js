@@ -3,6 +3,12 @@ var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
 
+function hackForRaceCondition() {
+  return new Promise(resolve => {
+    setTimeout(resolve, 500);
+  });
+}
+
 function debounce(fn) {
   var curr = Promise.resolve();
   return function() {
@@ -13,6 +19,21 @@ function debounce(fn) {
 
 function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+}
+
+function untilDataChannelOpen(dataChannel) {
+  return new Promise(resolve => {
+    if (dataChannel.readyState === "open") {
+      resolve();
+    } else {
+      const resolver = () => {
+        dataChannel.removeEventListener("open", resolver);
+        resolve();
+      };
+
+      dataChannel.addEventListener("open", resolver);
+    }
+  });
 }
 
 const isH264VideoSupported = (() => {
@@ -316,6 +337,11 @@ class JanusAdapter {
     debug("pub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
 
+    this.associate(conn, handle);
+
+    debug("pub waiting for data channels & webrtcup");
+    var webrtcup = new Promise(resolve => handle.on("webrtcup", resolve));
+
     // Unreliable datachannel: sending and receiving component updates.
     // Reliable datachannel: sending and recieving entity instantiations.
     var reliableChannel = conn.createDataChannel("reliable", { ordered: true });
@@ -323,13 +349,13 @@ class JanusAdapter {
       ordered: false,
       maxRetransmits: 0
     });
+
     reliableChannel.addEventListener("message", this.onDataChannelMessage);
     unreliableChannel.addEventListener("message", this.onDataChannelMessage);
 
-    this.associate(conn, handle);
-
-    debug("pub waiting for webrtcup");
-    await new Promise(resolve => handle.on("webrtcup", resolve));
+    await webrtcup;
+    await untilDataChannelOpen(reliableChannel);
+    await untilDataChannelOpen(unreliableChannel);
 
     // doing this here is sort of a hack around chrome renegotiation weirdness --
     // if we do it prior to webrtcup, chrome on gear VR will sometimes put a
@@ -356,7 +382,13 @@ class JanusAdapter {
       }
     });
 
+    // HACK this needs to be dug into my mquander, if this sleep is not done
+    // then in Chrome the initial incoming data channel messages are not received
+    // by other peers with some probability.
+    await hackForRaceCondition();
+
     debug("pub waiting for join");
+
     // Send join message to janus. Listen for join/leave messages. Automatically subscribe to all users' WebRTC data.
     var message = await this.sendJoin(handle, {
       notifications: true,
