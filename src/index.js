@@ -5,7 +5,7 @@ var error = require("debug")("naf-janus-adapter:error");
 
 function hackForRaceCondition() {
   return new Promise(resolve => {
-    setTimeout(resolve, 500);
+    setTimeout(resolve, 2000);
   });
 }
 
