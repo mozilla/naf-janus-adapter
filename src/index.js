@@ -22,16 +22,22 @@ function randomUint() {
 }
 
 function untilDataChannelOpen(dataChannel) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     if (dataChannel.readyState === "open") {
       resolve();
     } else {
-      const resolver = () => {
+      let resolver, rejector;
+
+      const clear = () => {
         dataChannel.removeEventListener("open", resolver);
-        resolve();
-      };
+        dataChannel.removeEventListener("error", rejector);
+      }
+
+      resolver = () => { clear(); resolve(); };
+      rejector = () => { clear(); reject(); }
 
       dataChannel.addEventListener("open", resolver);
+      dataChannel.addEventListener("error", rejector);
     }
   });
 }
@@ -382,7 +388,7 @@ class JanusAdapter {
       }
     });
 
-    // HACK this needs to be dug into my mquander, if this sleep is not done
+    // HACK this needs to be dug into by mquander, if this sleep is not done
     // then in Chrome the initial incoming data channel messages are not received
     // by other peers with some probability.
     await hackForRaceCondition();
