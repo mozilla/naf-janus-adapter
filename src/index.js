@@ -1,4 +1,5 @@
 var mj = require("minijanus");
+var sdpUtils = require("sdp");
 var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
@@ -46,6 +47,15 @@ const isH264VideoSupported = (() => {
   const video = document.createElement("video");
   return video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') !== "";
 })();
+
+const OPUS_PARAMETERS = {
+  // indicates that we want to enable DTX to elide silence packets
+  usedtx: 1,
+  // indicates that we prefer to receive mono audio (important for voip profile)
+  stereo: 0,
+  // indicates that we prefer to send mono audio (important for voip profile)
+  "sprop-stereo": 0
+};
 
 const PEER_CONNECTION_CONFIG = {
   iceServers: [{ urls: "stun:stun1.l.google.com:19302" }, { urls: "stun:stun2.l.google.com:19302" }]
@@ -311,7 +321,7 @@ class JanusAdapter {
       "negotiationneeded",
       debounce(ev => {
         debug("Sending new offer for handle: %o", handle);
-        var offer = conn.createOffer();
+        var offer = conn.createOffer().then(this.configurePublisherSdp);
         var local = offer.then(o => conn.setLocalDescription(o));
         var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
         return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
@@ -323,8 +333,7 @@ class JanusAdapter {
         var jsep = ev.jsep;
         if (jsep && jsep.type == "offer") {
           debug("Accepting new offer for handle: %o", handle);
-          jsep.sdp = this.configureSubscriberSdp(jsep.sdp);
-          var answer = conn.setRemoteDescription(jsep).then(_ => conn.createAnswer());
+          var answer = conn.setRemoteDescription(this.configureSubscriberSdp(jsep)).then(_ => conn.createAnswer());
           var local = answer.then(a => conn.setLocalDescription(a));
           var remote = answer.then(j => handle.sendJsep(j));
           return Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
@@ -419,28 +428,36 @@ class JanusAdapter {
     };
   }
 
-  configureSubscriberSdp(originalSdp) {
+  configurePublisherSdp(jsep) {
+    jsep.sdp = jsep.sdp.replace(/a=fmtp:(109|111).*\r\n/g, (line, pt) => {
+      const parameters = Object.assign(sdpUtils.parseFmtp(line), OPUS_PARAMETERS);
+      return sdpUtils.writeFmtp({ payloadType: pt, parameters: parameters });
+    });
+    return jsep;
+  }
+
+  configureSubscriberSdp(jsep) {
+    // todo: consider cleaning up these hacks to use sdputils
     if (!isH264VideoSupported) {
       if (navigator.userAgent.indexOf("HeadlessChrome") !== -1) {
         // HeadlessChrome (e.g. puppeteer) doesn't support webrtc video streams, so we remove those lines from the SDP.
-        return originalSdp.replace(/m=video[^]*m=/, "m=");
-      } else {
-        return originalSdp;
+        jsep.sdp = jsep.sdp.replace(/m=video[^]*m=/, "m=");
       }
     }
 
     // TODO: Hack to get video working on Chrome for Android. https://groups.google.com/forum/#!topic/mozilla.dev.media/Ye29vuMTpo8
     if (navigator.userAgent.indexOf("Android") === -1) {
-      return originalSdp.replace(
+      jsep.sdp = jsep.sdp.replace(
         "a=rtcp-fb:107 goog-remb\r\n",
         "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f\r\n"
       );
     } else {
-      return originalSdp.replace(
+      jsep.sdp = jsep.sdp.replace(
         "a=rtcp-fb:107 goog-remb\r\n",
         "a=rtcp-fb:107 goog-remb\r\na=rtcp-fb:107 transport-cc\r\na=fmtp:107 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f\r\n"
       );
     }
+    return jsep;
   }
 
   async createSubscriber(occupantId) {
