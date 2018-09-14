@@ -32,10 +32,16 @@ function untilDataChannelOpen(dataChannel) {
       const clear = () => {
         dataChannel.removeEventListener("open", resolver);
         dataChannel.removeEventListener("error", rejector);
-      }
+      };
 
-      resolver = () => { clear(); resolve(); };
-      rejector = () => { clear(); reject(); }
+      resolver = () => {
+        clear();
+        resolve();
+      };
+      rejector = () => {
+        clear();
+        reject();
+      };
 
       dataChannel.addEventListener("open", resolver);
       dataChannel.addEventListener("error", rejector);
