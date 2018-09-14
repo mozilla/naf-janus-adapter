@@ -736,7 +736,8 @@ class JanusAdapter {
           this.publisher.unreliableChannel.send(JSON.stringify({ clientId, dataType, data }));
           break;
         default:
-          console.err("JanusAdapter.unreliableTransport must be one of ['websocket', 'datachannel'].");
+          this.unreliableTransport(clientId, dataType, data);
+          break;
       }
     }
   }
@@ -753,7 +754,8 @@ class JanusAdapter {
           this.publisher.reliableChannel.send(JSON.stringify({ clientId, dataType, data }));
           break;
         default:
-          console.err("JanusAdapter.reliableTransport must be one of ['websocket', 'datachannel'].");
+          this.reliableTransport(clientId, dataType, data);
+          break;
       }
     }
   }
@@ -770,7 +772,8 @@ class JanusAdapter {
           this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
           break;
         default:
-          console.err("JanusAdapter.unreliableTransport must be one of ['websocket', 'datachannel'].");
+          this.unreliableTransport(undefined, dataType, data);
+          break;
       }
     }
   }
@@ -787,7 +790,8 @@ class JanusAdapter {
           this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
           break;
         default:
-          console.err("JanusAdapter.reliableTransport must be one of ['websocket', 'datachannel'].");
+          this.reliableTransport(undefined, dataType, data);
+          break;
       }
     }
   }
