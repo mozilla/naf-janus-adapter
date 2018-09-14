@@ -32,10 +32,16 @@ function untilDataChannelOpen(dataChannel) {
       const clear = () => {
         dataChannel.removeEventListener("open", resolver);
         dataChannel.removeEventListener("error", rejector);
-      }
+      };
 
-      resolver = () => { clear(); resolve(); };
-      rejector = () => { clear(); reject(); }
+      resolver = () => {
+        clear();
+        resolve();
+      };
+      rejector = () => {
+        clear();
+        reject();
+      };
 
       dataChannel.addEventListener("open", resolver);
       dataChannel.addEventListener("error", rejector);
@@ -72,6 +78,8 @@ class JanusAdapter {
     this.webRtcOptions = {};
     this.ws = null;
     this.session = null;
+    this.reliableTransport = "datachannel";
+    this.unreliableTransport = "datachannel";
 
     // In the event the server restarts and all clients lose connection, reconnect with
     // some random jitter added to prevent simultaneous reconnection requests.
@@ -97,6 +105,7 @@ class JanusAdapter {
     this.onWebsocketClose = this.onWebsocketClose.bind(this);
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
+    this.onData = this.onData.bind(this);
   }
 
   setServerUrl(url) {
@@ -394,6 +403,8 @@ class JanusAdapter {
         document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: data.by } }));
       } else if (data.event == "unblocked") {
         document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: data.by } }));
+      } else if (data.event === "data") {
+        this.onData(JSON.parse(data.body));
       }
     });
 
@@ -557,11 +568,13 @@ class JanusAdapter {
     }
   }
 
-  onDataChannelMessage(event) {
-    var message = JSON.parse(event.data);
+  onDataChannelMessage(e) {
+    this.onData(JSON.parse(e.data));
+  }
 
+  onData(message) {
     if (debug.enabled) {
-      debug(`DC in: ${event.data}`);
+      debug(`DC in: ${message}`);
     }
 
     if (!message.dataType) return;
@@ -715,7 +728,16 @@ class JanusAdapter {
     if (!this.publisher) {
       console.warn("sendData called without a publisher");
     } else {
-      this.publisher.unreliableChannel.send(JSON.stringify({ clientId, dataType, data }));
+      switch (this.unreliableTransport) {
+        case "websocket":
+          this.publisher.handle.sendMessage({ kind: "data", body: JSON.stringify({ dataType, data }), whom: clientId });
+          break;
+        case "datachannel":
+          this.publisher.unreliableChannel.send(JSON.stringify({ clientId, dataType, data }));
+          break;
+        default:
+          console.err("JanusAdapter.unreliableTransport must be one of ['websocket', 'datachannel'].");
+      }
     }
   }
 
@@ -723,7 +745,16 @@ class JanusAdapter {
     if (!this.publisher) {
       console.warn("sendDataGuaranteed called without a publisher");
     } else {
-      this.publisher.reliableChannel.send(JSON.stringify({ clientId, dataType, data }));
+      switch (this.reliableTransport) {
+        case "websocket":
+          this.publisher.handle.sendMessage({ kind: "data", body: JSON.stringify({ dataType, data }), whom: clientId });
+          break;
+        case "datachannel":
+          this.publisher.reliableChannel.send(JSON.stringify({ clientId, dataType, data }));
+          break;
+        default:
+          console.err("JanusAdapter.reliableTransport must be one of ['websocket', 'datachannel'].");
+      }
     }
   }
 
@@ -731,7 +762,16 @@ class JanusAdapter {
     if (!this.publisher) {
       console.warn("broadcastData called without a publisher");
     } else {
-      this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
+      switch (this.unreliableTransport) {
+        case "websocket":
+          this.publisher.handle.sendMessage({ kind: "data", body: JSON.stringify({ dataType, data }) });
+          break;
+        case "datachannel":
+          this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
+          break;
+        default:
+          console.err("JanusAdapter.unreliableTransport must be one of ['websocket', 'datachannel'].");
+      }
     }
   }
 
@@ -739,7 +779,16 @@ class JanusAdapter {
     if (!this.publisher) {
       console.warn("broadcastDataGuaranteed called without a publisher");
     } else {
-      this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
+      switch (this.reliableTransport) {
+        case "websocket":
+          this.publisher.handle.sendMessage({ kind: "data", body: JSON.stringify({ dataType, data }) });
+          break;
+        case "datachannel":
+          this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
+          break;
+        default:
+          console.err("JanusAdapter.reliableTransport must be one of ['websocket', 'datachannel'].");
+      }
     }
   }
 
