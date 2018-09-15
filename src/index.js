@@ -4,12 +4,6 @@ var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
 
-function hackForRaceCondition() {
-  return new Promise(resolve => {
-    setTimeout(resolve, 2000);
-  });
-}
-
 function debounce(fn) {
   var curr = Promise.resolve();
   return function() {
@@ -407,11 +401,6 @@ class JanusAdapter {
         this.onData(JSON.parse(data.body));
       }
     });
-
-    // HACK this needs to be dug into by mquander, if this sleep is not done
-    // then in Chrome the initial incoming data channel sync messages are not received
-    // from other NAF peers with some probability.
-    await hackForRaceCondition();
 
     debug("pub waiting for join");
 
