@@ -220,8 +220,10 @@ class JanusAdapter {
     // Call the naf connectSuccess callback before we start receiving WebRTC messages.
     this.connectSuccess(this.userId);
 
-    // Add all of the initial occupants.
-    await Promise.all(this.publisher.initialOccupants.map(this.addOccupant.bind(this)));
+    for (let i = 0; i < this.publisher.initialOccupants; i++) {
+      await this.addOccupant(this.publisher.initialOccupants[i]);
+    }
+
   }
 
   onWebsocketClose(event) {
