@@ -333,7 +333,7 @@ class JanusAdapter {
         // On iOS Safari, WebRTC negotiation fails easily if we do not pause before sending
         // a new offer to Janus here.
         if (iOS) {
-          await return new Promise(r => { setTimeout(r, 5000); });
+          await new Promise(r => { setTimeout(r, 5000); });
         }
         const setRemote = handle.sendJsep(offer).then(r => conn.setRemoteDescription(r.jsep));;
         return setRemote.catch(e => debug("Error negotiating offer: " + e));
