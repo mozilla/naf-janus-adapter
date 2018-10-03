@@ -5,12 +5,6 @@ var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
 var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
-function hackForiOSRaceCondition() {
-  return new Promise(resolve => {
-    setTimeout(resolve, 5000);
-  });
-}
-
 function debounce(fn) {
   var curr = Promise.resolve();
   return function() {
@@ -339,7 +333,7 @@ class JanusAdapter {
         // On iOS Safari, WebRTC negotiation fails easily if we do not pause before sending
         // a new offer to Janus here.
         if (iOS) {
-          await hackForiOSRaceCondition();
+          await return new Promise(r => { setTimeout(r, 5000); });
         }
         const setRemote = handle.sendJsep(offer).then(r => conn.setRemoteDescription(r.jsep));;
         return setRemote.catch(e => debug("Error negotiating offer: " + e));
