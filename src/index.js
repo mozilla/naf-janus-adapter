@@ -3,6 +3,13 @@ var sdpUtils = require("sdp");
 var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
+var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+function hackForiOSRaceCondition() {
+  return new Promise(resolve => {
+    setTimeout(resolve, 5000);
+  });
+}
 
 function debounce(fn) {
   var curr = Promise.resolve();
@@ -322,14 +329,20 @@ class JanusAdapter {
     // it's finished processing an existing SDP. in actuality, it seems like this is maybe
     // too liberal and we need to wait some amount of time after an offer before sending another,
     // but we don't currently know any good way of detecting exactly how long :(
+    //
     conn.addEventListener(
       "negotiationneeded",
-      debounce(ev => {
+      debounce(async ev => {
         debug("Sending new offer for handle: %o", handle);
-        var offer = conn.createOffer().then(this.configurePublisherSdp);
-        var local = offer.then(o => conn.setLocalDescription(o));
-        var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
-        return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
+        var offer = await conn.createOffer().then(this.configurePublisherSdp);
+        await conn.setLocalDescription(offer);
+        // On iOS Safari, WebRTC negotiation fails easily if we do not pause before sending
+        // a new offer to Janus here.
+        if (iOS) {
+          await hackForiOSRaceCondition();
+        }
+        const setRemote = handle.sendJsep(offer).then(r => conn.setRemoteDescription(r.jsep));;
+        return setRemote.catch(e => debug("Error negotiating offer: " + e));
       })
     );
     handle.on(
