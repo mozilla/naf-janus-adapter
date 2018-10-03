@@ -339,9 +339,8 @@ class JanusAdapter {
           remote = offer.then(o => new Promise(r => setTimeout(() => r(o), 5000)));
         }
 
-        return remote
-          .then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep))
-          .catch(e => error("Error negotiating offer: %o", e));
+        remote = remote.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
+        return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
       })
     );
     handle.on(
