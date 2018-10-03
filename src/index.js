@@ -329,14 +329,12 @@ class JanusAdapter {
         debug("Sending new offer for handle: %o", handle);
         var offer = conn.createOffer().then(this.configurePublisherSdp);
         var local = offer.then(o => conn.setLocalDescription(o));
-        var remote;
+        var remote = offer;
 
-        if (!iOS) {
-          remote = offer;
-        } else {
+        if (iOS) {
           // On iOS Safari, WebRTC negotiation fails easily if we do not pause before sending
           // a new offer to Janus here.
-          remote = offer.then(o => new Promise(r => setTimeout(() => r(o), 5000)));
+          remote = remote.then(o => new Promise(r => setTimeout(() => r(o), 5000)));
         }
 
         remote = remote.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
