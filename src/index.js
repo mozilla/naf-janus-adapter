@@ -3,6 +3,8 @@ var sdpUtils = require("sdp");
 var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
+var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
 function debounce(fn) {
   var curr = Promise.resolve();
@@ -328,7 +330,15 @@ class JanusAdapter {
         debug("Sending new offer for handle: %o", handle);
         var offer = conn.createOffer().then(this.configurePublisherSdp);
         var local = offer.then(o => conn.setLocalDescription(o));
-        var remote = offer.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
+        var remote = offer;
+
+        if (isSafari && iOS) {
+          // On Safari, WebRTC negotiation fails easily if we do not pause before sending
+          // a new offer to Janus here.
+          remote = remote.then(o => new Promise(r => setTimeout(() => r(o), 5000)));
+        }
+
+        remote = remote.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
         return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
       })
     );
