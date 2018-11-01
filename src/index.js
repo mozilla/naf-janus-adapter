@@ -691,14 +691,16 @@ class JanusAdapter {
       stream.getTracks().forEach(t => {
         var sender = existingSenders.find(s => s.track != null && s.track.kind == t.kind);
         if (sender != null) {
+          const wasEnabled = sender.track.enabled;
+
           if (sender.replaceTrack) {
             sender.replaceTrack(t);
-            sender.track.enabled = true;
+            sender.track.enabled = wasEnabled;
           } else {
             // replaceTrack isn't implemented in Chrome, even via webrtc-adapter.
             stream.removeTrack(sender.track);
             stream.addTrack(t);
-            t.enabled = true;
+            t.enabled = wasEnabled;
           }
           newSenders.push(sender);
         } else {
