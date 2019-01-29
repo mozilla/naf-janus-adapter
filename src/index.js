@@ -69,6 +69,7 @@ class JanusAdapter {
   constructor() {
     this.room = null;
     this.userId = String(randomUint());
+    this.joinToken = null;
 
     this.serverUrl = null;
     this.webRtcOptions = {};
@@ -112,6 +113,10 @@ class JanusAdapter {
 
   setRoom(roomName) {
     this.room = roomName;
+  }
+
+  setJoinToken(joinToken) {
+    this.joinToken = joinToken;
   }
 
   setWebRtcOptions(options) {
@@ -513,7 +518,8 @@ class JanusAdapter {
       kind: "join",
       room_id: this.room,
       user_id: this.userId,
-      subscribe
+      subscribe,
+      token: this.joinToken
     });
   }
 
@@ -806,6 +812,12 @@ class JanusAdapter {
   unblock(clientId) {
     return this.publisher.handle.sendMessage({ kind: "unblock", whom: clientId }).then(() => {
       document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: clientId } }));
+    });
+  }
+
+  kick(clientId, kickToken) {
+    return this.publisher.handle.sendMessage({ kind: "kick", whom: clientId, token: kickToken }).then(() => {
+      document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: clientId } }));
     });
   }
 }
