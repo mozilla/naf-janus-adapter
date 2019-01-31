@@ -415,9 +415,6 @@ class JanusAdapter {
         this.addOccupant(data.user_id);
       } else if (data.event == "leave" && data.room_id == this.room) {
         this.removeOccupant(data.user_id);
-      } else if (data.event == "kicked") {
-        // TODO BP: This data.by doesn't look right.
-        document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: data.by } }));
       } else if (data.event == "blocked") {
         document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: data.by } }));
       } else if (data.event == "unblocked") {
