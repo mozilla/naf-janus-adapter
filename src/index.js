@@ -68,7 +68,8 @@ const WS_NORMAL_CLOSURE = 1000;
 class JanusAdapter {
   constructor() {
     this.room = null;
-    this.userId = String(randomUint());
+    // We expect the consumer to set a client id before connecting.
+    this.clientId = null;
     this.joinToken = null;
 
     this.serverUrl = null;
@@ -117,6 +118,10 @@ class JanusAdapter {
 
   setJoinToken(joinToken) {
     this.joinToken = joinToken;
+  }
+
+  setClientId(clientId) {
+    this.clientId = clientId;
   }
 
   setWebRtcOptions(options) {
@@ -219,7 +224,7 @@ class JanusAdapter {
     this.publisher = await this.createPublisher();
 
     // Call the naf connectSuccess callback before we start receiving WebRTC messages.
-    this.connectSuccess(this.userId);
+    this.connectSuccess(this.clientId);
 
     for (let i = 0; i < this.publisher.initialOccupants.length; i++) {
       await this.addOccupant(this.publisher.initialOccupants[i]);
@@ -410,6 +415,9 @@ class JanusAdapter {
         this.addOccupant(data.user_id);
       } else if (data.event == "leave" && data.room_id == this.room) {
         this.removeOccupant(data.user_id);
+      } else if (data.event == "kicked") {
+        // TODO BP: This data.by doesn't look right.
+        document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: data.by } }));
       } else if (data.event == "blocked") {
         document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: data.by } }));
       } else if (data.event == "unblocked") {
@@ -517,7 +525,7 @@ class JanusAdapter {
     return handle.sendMessage({
       kind: "join",
       room_id: this.room,
-      user_id: this.userId,
+      user_id: this.clientId,
       subscribe,
       token: this.joinToken
     });
@@ -718,7 +726,7 @@ class JanusAdapter {
       });
     }
     this.localMediaStream = stream;
-    this.setMediaStream(this.userId, stream);
+    this.setMediaStream(this.clientId, stream);
   }
 
   enableMicrophone(enabled) {
@@ -803,6 +811,12 @@ class JanusAdapter {
     }
   }
 
+  kick(clientId, permsToken) {
+    return this.publisher.handle.sendMessage({ kind: "kick", room_id: this.room, user_id: clientId, token: permsToken }).then(() => {
+      document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: clientId } }));
+    });
+  }
+
   block(clientId) {
     return this.publisher.handle.sendMessage({ kind: "block", whom: clientId }).then(() => {
       document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: clientId } }));
@@ -812,12 +826,6 @@ class JanusAdapter {
   unblock(clientId) {
     return this.publisher.handle.sendMessage({ kind: "unblock", whom: clientId }).then(() => {
       document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: clientId } }));
-    });
-  }
-
-  kick(clientId, kickToken) {
-    return this.publisher.handle.sendMessage({ kind: "kick", whom: clientId, token: kickToken }).then(() => {
-      document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: clientId } }));
     });
   }
 }
