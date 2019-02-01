@@ -68,7 +68,9 @@ const WS_NORMAL_CLOSURE = 1000;
 class JanusAdapter {
   constructor() {
     this.room = null;
-    this.userId = String(randomUint());
+    // We expect the consumer to set a client id before connecting.
+    this.clientId = null;
+    this.joinToken = null;
 
     this.serverUrl = null;
     this.webRtcOptions = {};
@@ -112,6 +114,14 @@ class JanusAdapter {
 
   setRoom(roomName) {
     this.room = roomName;
+  }
+
+  setJoinToken(joinToken) {
+    this.joinToken = joinToken;
+  }
+
+  setClientId(clientId) {
+    this.clientId = clientId;
   }
 
   setWebRtcOptions(options) {
@@ -214,7 +224,7 @@ class JanusAdapter {
     this.publisher = await this.createPublisher();
 
     // Call the naf connectSuccess callback before we start receiving WebRTC messages.
-    this.connectSuccess(this.userId);
+    this.connectSuccess(this.clientId);
 
     for (let i = 0; i < this.publisher.initialOccupants.length; i++) {
       await this.addOccupant(this.publisher.initialOccupants[i]);
@@ -512,8 +522,9 @@ class JanusAdapter {
     return handle.sendMessage({
       kind: "join",
       room_id: this.room,
-      user_id: this.userId,
-      subscribe
+      user_id: this.clientId,
+      subscribe,
+      token: this.joinToken
     });
   }
 
@@ -712,7 +723,7 @@ class JanusAdapter {
       });
     }
     this.localMediaStream = stream;
-    this.setMediaStream(this.userId, stream);
+    this.setMediaStream(this.clientId, stream);
   }
 
   enableMicrophone(enabled) {
@@ -795,6 +806,12 @@ class JanusAdapter {
           break;
       }
     }
+  }
+
+  kick(clientId, permsToken) {
+    return this.publisher.handle.sendMessage({ kind: "kick", room_id: this.room, user_id: clientId, token: permsToken }).then(() => {
+      document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: clientId } }));
+    });
   }
 
   block(clientId) {
