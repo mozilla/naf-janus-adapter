@@ -420,7 +420,7 @@ class JanusAdapter {
       } else if (data.event == "unblocked") {
         document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: data.by } }));
       } else if (data.event === "data") {
-        this.onData("event_data", JSON.parse(data.body));
+        this.onData(JSON.parse(data.body), "event_data");
       }
     });
 
