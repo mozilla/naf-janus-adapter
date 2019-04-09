@@ -390,8 +390,8 @@ class JanusAdapter {
       maxRetransmits: 0
     });
 
-    reliableChannel.addEventListener("message", e => this.onDataChannelMessage("reliable", e));
-    unreliableChannel.addEventListener("message", e => this.onDataChannelMessage("unreliable", e));
+    reliableChannel.addEventListener("message", e => this.onDataChannelMessage(e, "sfu-reliable"));
+    unreliableChannel.addEventListener("message", e => this.onDataChannelMessage(e, "sfu-unreliable"));
 
     await webrtcup;
     await untilDataChannelOpen(reliableChannel);
@@ -420,7 +420,7 @@ class JanusAdapter {
       } else if (data.event == "unblocked") {
         document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: data.by } }));
       } else if (data.event === "data") {
-        this.onData(JSON.parse(data.body), "event_data");
+        this.onData(JSON.parse(data.body), "sfu-event");
       }
     });
 
