@@ -89,6 +89,7 @@ class JanusAdapter {
 
     this.publisher = null;
     this.occupants = {};
+    this.leftOccupants = new Set();
     this.mediaStreams = {};
     this.localMediaStream = null;
     this.pendingMediaRequests = new Map();
@@ -229,7 +230,6 @@ class JanusAdapter {
     for (let i = 0; i < this.publisher.initialOccupants.length; i++) {
       await this.addOccupant(this.publisher.initialOccupants[i]);
     }
-
   }
 
   onWebsocketClose(event) {
@@ -283,6 +283,8 @@ class JanusAdapter {
   async addOccupant(occupantId) {
     var subscriber = await this.createSubscriber(occupantId);
 
+    if (!subscriber) return;
+
     this.occupants[occupantId] = subscriber;
 
     this.setMediaStream(occupantId, subscriber.mediaStream);
@@ -301,6 +303,8 @@ class JanusAdapter {
   }
 
   removeOccupant(occupantId) {
+    this.leftOccupants.add(occupantId);
+
     if (this.occupants[occupantId]) {
       // Close the subscriber peer connection. Which also detaches the plugin handle.
       if (this.occupants[occupantId]) {
@@ -483,21 +487,58 @@ class JanusAdapter {
   }
 
   async createSubscriber(occupantId) {
+    if (this.leftOccupants.has(occupantId)) {
+      console.warn(occupantId + ": cancelled occupant connection, occupant left before subscription negotation.");
+      return null;
+    }
+
     var handle = new mj.JanusPluginHandle(this.session);
     var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
 
-    debug("sub waiting for sfu");
+    debug(occupantId + ": sub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
 
     this.associate(conn, handle);
 
-    debug("sub waiting for join");
+    debug(occupantId + ": sub waiting for join");
+
+    if (this.leftOccupants.has(occupantId)) {
+      conn.close();
+      console.warn(occupantId + ": cancelled occupant connection, occupant left after attach");
+      return null;
+    }
+
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's media.
     // Janus should send us an offer for this occupant's media in response to this.
     const resp = await this.sendJoin(handle, { media: occupantId });
 
-    debug("sub waiting for webrtcup");
-    await new Promise(resolve => handle.on("webrtcup", resolve));
+    if (this.leftOccupants.has(occupantId)) {
+      conn.close();
+      console.warn(occupantId + ": cancelled occupant connection, occupant left after join");
+      return null;
+    }
+
+    debug(occupantId + ": sub waiting for webrtcup");
+
+    await new Promise(resolve => {
+      const interval = setInterval(() => {
+        if (this.leftOccupants.has(occupantId)) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 1000);
+
+      handle.on("webrtcup", () => {
+        clearInterval(interval);
+        resolve();
+      });
+    });
+
+    if (this.leftOccupants.has(occupantId)) {
+      conn.close();
+      console.warn(occupantId + ": cancel occupant connection, occupant left during or after webrtcup");
+      return null;
+    }
 
     var mediaStream = new MediaStream();
     var receivers = conn.getReceivers();
@@ -510,7 +551,7 @@ class JanusAdapter {
       mediaStream = null;
     }
 
-    debug("subscriber ready");
+    debug(occupantId + ": subscriber ready");
     return {
       handle,
       mediaStream,
