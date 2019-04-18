@@ -394,8 +394,8 @@ class JanusAdapter {
       maxRetransmits: 0
     });
 
-    reliableChannel.addEventListener("message", this.onDataChannelMessage);
-    unreliableChannel.addEventListener("message", this.onDataChannelMessage);
+    reliableChannel.addEventListener("message", e => this.onDataChannelMessage(e, "janus-reliable"));
+    unreliableChannel.addEventListener("message", e => this.onDataChannelMessage(e, "janus-unreliable"));
 
     await webrtcup;
     await untilDataChannelOpen(reliableChannel);
@@ -424,7 +424,7 @@ class JanusAdapter {
       } else if (data.event == "unblocked") {
         document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: data.by } }));
       } else if (data.event === "data") {
-        this.onData(JSON.parse(data.body));
+        this.onData(JSON.parse(data.body), "janus-event");
       }
     });
 
@@ -592,7 +592,7 @@ class JanusAdapter {
       // note that delete messages have no "owner" so we have to check for that as well
       if (message.data.owner && !this.occupants[message.data.owner]) continue;
 
-      this.onOccupantMessage(null, message.dataType, message.data);
+      this.onOccupantMessage(null, message.dataType, message.data, message.source);
     }
     this.frozenUpdates.clear();
   }
@@ -621,21 +621,23 @@ class JanusAdapter {
     }
   }
 
-  onDataChannelMessage(e) {
-    this.onData(JSON.parse(e.data));
+  onDataChannelMessage(e, source) {
+    this.onData(JSON.parse(e.data), source);
   }
 
-  onData(message) {
+  onData(message, source) {
     if (debug.enabled) {
       debug(`DC in: ${message}`);
     }
 
     if (!message.dataType) return;
 
+    message.source = source;
+
     if (this.frozen) {
       this.storeMessage(message);
     } else {
-      this.onOccupantMessage(null, message.dataType, message.data);
+      this.onOccupantMessage(null, message.dataType, message.data, message.source);
     }
   }
 
