@@ -586,37 +586,76 @@ class JanusAdapter {
     this.flushPendingUpdates();
   }
 
+  dataForUpdateMultiMessage(networkId, message) {
+    for (let i = 0, l = message.data.d.length; i < l; i++) {
+      const nextItem = message.data.d[i];
+
+      if (nextItem.networkId === networkId) {
+        return nextItem;
+      }
+    }
+
+    return null;
+  }
+
   flushPendingUpdates() {
     for (const [networkId, message] of this.frozenUpdates) {
+      let data;
+      let dataType;
+
+      if (message.dataType === "um") {
+        data = this.dataForUpdateMultiMessage(networkId, message);
+        dataType = "u";
+      } else {
+        dataType = message.dataType;
+        data = message.data;
+      }
+
       // ignore messages relating to users who have disconnected since freezing, their entities will have aleady been removed by NAF
       // note that delete messages have no "owner" so we have to check for that as well
-      if (message.data.owner && !this.occupants[message.data.owner]) continue;
+      if (data.owner && !this.occupants[data.owner]) continue;
 
-      this.onOccupantMessage(null, message.dataType, message.data, message.source);
+      this.onOccupantMessage(null, dataType, data, message.source);
     }
     this.frozenUpdates.clear();
   }
 
   storeMessage(message) {
-    const networkId = message.data.networkId;
+    if (message.dataType === "um") { // UpdateMulti
+      for (let i = 0, l = message.data.d.length; i < l; i++) {
+        this.storeSingleMessage(message, i);
+      }
+    } else {
+      this.storeSingleMessage(message);
+    }
+  }
+
+  storeSingleMessage(message, index) {
+    const data = index !== undefined ? message.data.d[index] : message.data;
+    const dataType = message.dataType;
+    const source = message.source;
+
+    const networkId = data.networkId;
+
     if (!this.frozenUpdates.has(networkId)) {
       this.frozenUpdates.set(networkId, message);
     } else {
       const storedMessage = this.frozenUpdates.get(networkId);
+      const storedData = storedMessage.dataType === "um" ? this.dataForUpdateMultiMessage(networkId, message) : storedMessage.data;
 
       // Avoid updating components if the entity data received did not come from the current owner.
-      const isOutdatedMessage = message.data.lastOwnerTime < storedMessage.data.lastOwnerTime;
-      const isContemporaneousMessage = message.data.lastOwnerTime === storedMessage.data.lastOwnerTime;
-      if (isOutdatedMessage || (isContemporaneousMessage && storedMessage.data.owner > message.data.owner)) {
+      const isOutdatedMessage = data.lastOwnerTime < storedData.lastOwnerTime;
+      const isContemporaneousMessage = data.lastOwnerTime === storedData.lastOwnerTime;
+      if (isOutdatedMessage || (isContemporaneousMessage && storedData.owner > data.owner)) {
         return;
       }
 
       // Delete messages override any other messages for this entity
-      if (message.dataType === "r") {
+      if (dataType === "r") {
         this.frozenUpdates.set(networkId, message);
       } else {
         // merge in component updates
-        Object.assign(storedMessage.data.components, message.data.components);
+        Object.assign(storedData.components, data.components);
       }
     }
   }
