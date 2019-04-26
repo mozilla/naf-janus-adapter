@@ -588,10 +588,10 @@ class JanusAdapter {
 
   dataForUpdateMultiMessage(networkId, message) {
     for (let i = 0, l = message.data.d.length; i < l; i++) {
-      const nextItem = message.data.d[i];
+      const data = message.data.d[i];
 
-      if (nextItem.networkId === networkId) {
-        return nextItem;
+      if (data.networkId === networkId) {
+        return data;
       }
     }
 
