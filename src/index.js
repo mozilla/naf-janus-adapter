@@ -641,7 +641,7 @@ class JanusAdapter {
       this.frozenUpdates.set(networkId, message);
     } else {
       const storedMessage = this.frozenUpdates.get(networkId);
-      const storedData = storedMessage.dataType === "um" ? this.dataForUpdateMultiMessage(networkId, message) : storedMessage.data;
+      const storedData = storedMessage.dataType === "um" ? this.dataForUpdateMultiMessage(networkId, storedMessage) : storedMessage.data;
 
       // Avoid updating components if the entity data received did not come from the current owner.
       const isOutdatedMessage = data.lastOwnerTime < storedData.lastOwnerTime;
