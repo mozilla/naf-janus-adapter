@@ -18,33 +18,6 @@ function randomUint() {
   return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 }
 
-function untilDataChannelOpen(dataChannel) {
-  return new Promise((resolve, reject) => {
-    if (dataChannel.readyState === "open") {
-      resolve();
-    } else {
-      let resolver, rejector;
-
-      const clear = () => {
-        dataChannel.removeEventListener("open", resolver);
-        dataChannel.removeEventListener("error", rejector);
-      };
-
-      resolver = () => {
-        clear();
-        resolve();
-      };
-      rejector = () => {
-        clear();
-        reject();
-      };
-
-      dataChannel.addEventListener("open", resolver);
-      dataChannel.addEventListener("error", rejector);
-    }
-  });
-}
-
 const isH264VideoSupported = (() => {
   const video = document.createElement("video");
   return video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') !== "";
@@ -103,7 +76,6 @@ class JanusAdapter {
     this.onWebsocketOpen = this.onWebsocketOpen.bind(this);
     this.onWebsocketClose = this.onWebsocketClose.bind(this);
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
-    this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
     this.onData = this.onData.bind(this);
   }
 
@@ -383,23 +355,8 @@ class JanusAdapter {
 
     this.associate(conn, handle);
 
-    debug("pub waiting for data channels & webrtcup");
-    var webrtcup = new Promise(resolve => handle.on("webrtcup", resolve));
-
-    // Unreliable datachannel: sending and receiving component updates.
-    // Reliable datachannel: sending and recieving entity instantiations.
-    var reliableChannel = conn.createDataChannel("reliable", { ordered: true });
-    var unreliableChannel = conn.createDataChannel("unreliable", {
-      ordered: false,
-      maxRetransmits: 0
-    });
-
-    reliableChannel.addEventListener("message", e => this.onDataChannelMessage(e, "janus-reliable"));
-    unreliableChannel.addEventListener("message", e => this.onDataChannelMessage(e, "janus-unreliable"));
-
-    await webrtcup;
-    await untilDataChannelOpen(reliableChannel);
-    await untilDataChannelOpen(unreliableChannel);
+    debug("pub waiting for webrtcup");
+    await new Promise(resolve => handle.on("webrtcup", resolve));
 
     // doing this here is sort of a hack around chrome renegotiation weirdness --
     // if we do it prior to webrtcup, chrome on gear VR will sometimes put a
@@ -660,13 +617,9 @@ class JanusAdapter {
     }
   }
 
-  onDataChannelMessage(e, source) {
-    this.onData(JSON.parse(e.data), source);
-  }
-
-  onData(message, source) {
+  onData(message) {
     if (debug.enabled) {
-      debug(`DC in: ${message}`);
+      debug(`Data in: ${message}`);
     }
 
     if (!message.dataType) return;
