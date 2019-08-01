@@ -94,6 +94,7 @@ class JanusAdapter {
     this.localMediaStream = null;
     this.pendingMediaRequests = new Map();
 
+    this.blockedClients = new Map();
     this.frozenUpdates = new Map();
 
     this.timeOffsets = [];
@@ -611,9 +612,13 @@ class JanusAdapter {
         data = message.data;
       }
 
-      // ignore messages relating to users who have disconnected since freezing, their entities will have aleady been removed by NAF
-      // note that delete messages have no "owner" so we have to check for that as well
+      // Ignore messages relating to users who have disconnected since freezing, their entities
+      // will have aleady been removed by NAF.
+      // Note that delete messages have no "owner" so we have to check for that as well.
       if (data.owner && !this.occupants[data.owner]) continue;
+
+      // Ignore messages from users that we may have blocked while frozen.
+      if (data.owner && this.blockedClients.has(data.owner)) continue;
 
       this.onOccupantMessage(null, dataType, data, message.source);
     }
@@ -898,12 +903,14 @@ class JanusAdapter {
 
   block(clientId) {
     return this.publisher.handle.sendMessage({ kind: "block", whom: clientId }).then(() => {
+      this.blockedClients.set(clientId, true);
       document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: clientId } }));
     });
   }
 
   unblock(clientId) {
     return this.publisher.handle.sendMessage({ kind: "unblock", whom: clientId }).then(() => {
+      this.blockedClients.delete(clientId);
       document.body.dispatchEvent(new CustomEvent("unblocked", { detail: { clientId: clientId } }));
     });
   }
