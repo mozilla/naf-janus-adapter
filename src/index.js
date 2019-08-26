@@ -775,7 +775,7 @@ class JanusAdapter {
     }
   }
 
-  setLocalMediaStream(stream) {
+  async setLocalMediaStream(stream) {
     // our job here is to make sure the connection winds up with RTP senders sending the stuff in this stream,
     // and not the stuff that isn't in this stream. strategy is to replace existing tracks if we can, add tracks
     // that we can't replace, and disable tracks that don't exist anymore.
@@ -784,15 +784,21 @@ class JanusAdapter {
     // can't wind up with a SDP that has >1 audio or >1 video tracks, even if one of them is inactive (what you get if
     // you remove a track from an existing stream.)
     if (this.publisher && this.publisher.conn) {
-      var existingSenders = this.publisher.conn.getSenders();
-      var newSenders = [];
-      stream.getTracks().forEach(t => {
-        var sender = existingSenders.find(s => s.track != null && s.track.kind == t.kind);
+      const existingSenders = this.publisher.conn.getSenders();
+      const newSenders = [];
+      const tracks = stream.getTracks();
+
+      for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        const sender = existingSenders.find(s => s.track != null && s.track.kind == t.kind);
+
         if (sender != null) {
           if (sender.replaceTrack) {
-            sender.replaceTrack(t);
+            await sender.replaceTrack(t);
           } else {
-            // replaceTrack isn't implemented in Chrome, even via webrtc-adapter.
+            // Fallback for browsers that don't support replaceTrack. At this time of this writing
+            // most browsers support it, and testing this code path seems to not work properly
+            // in Chrome anymore.
             stream.removeTrack(sender.track);
             stream.addTrack(t);
           }
@@ -800,7 +806,7 @@ class JanusAdapter {
         } else {
           newSenders.push(this.publisher.conn.addTrack(t, stream));
         }
-      });
+      }
       existingSenders.forEach(s => {
         if (!newSenders.includes(s)) {
           s.track.enabled = false;
