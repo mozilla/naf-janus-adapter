@@ -588,6 +588,9 @@ class JanusAdapter {
   }
 
   dataForUpdateMultiMessage(networkId, message) {
+    // "d" is an array of unique entity datas, where each item in the array represents a single entity and contains
+    // metadata for the entity and an array of components that have been updated on the entity.
+    // This method finds the data corresponding to the given networkId.
     for (let i = 0, l = message.data.d.length; i < l; i++) {
       const data = message.data.d[i];
 
@@ -655,12 +658,20 @@ class JanusAdapter {
         return;
       }
 
-      // Delete messages override any other messages for this entity
       if (dataType === "r") {
-        this.frozenUpdates.set(networkId, message);
+        const createdWhileFrozen = storedData && storedData.isFirstSync;
+        if (createdWhileFrozen) {
+          // If the entity was created and deleted while frozen, don't bother conveying anything to the consumer.
+          this.frozenUpdates.delete(networkId);
+        } else {
+          // Delete messages override any other messages for this entity
+          this.frozenUpdates.set(networkId, message);
+        }
       } else {
         // merge in component updates
-        Object.assign(storedData.components, data.components);
+        if (storedData.components && data.components) {
+          Object.assign(storedData.components, data.components);
+        }
       }
     }
   }
