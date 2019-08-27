@@ -628,7 +628,8 @@ class JanusAdapter {
       let data = this.getPendingData(networkId, message);
       if (!data) continue;
 
-      // Override the data type on "um" messages types, since we squash updates in storeSingleMessage.
+      // Override the data type on "um" messages types, since we extract entity updates from "um" messages into
+      // individual frozenUpdates in storeSingleMessage.
       const dataType = message.dataType === "um" ? "u" : message.dataType;
 
       this.onOccupantMessage(null, dataType, data, message.source);
