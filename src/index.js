@@ -588,8 +588,8 @@ class JanusAdapter {
   }
 
   dataForUpdateMultiMessage(networkId, message) {
-    // "d" is an array of unique entity datas, where each item in the array represents a single entity and contains
-    // metadata for the entity and an array of components that have been updated on the entity.
+    // "d" is an array of entity datas, where each item in the array represents a unique entity and contains
+    // metadata for the entity, and an array of components that have been updated on the entity.
     // This method finds the data corresponding to the given networkId.
     for (let i = 0, l = message.data.d.length; i < l; i++) {
       const data = message.data.d[i];
@@ -602,26 +602,34 @@ class JanusAdapter {
     return null;
   }
 
+  getPendingData(networkId, message) {
+    if (!message) return null;
+
+    let data = message.dataType === "um" ? this.dataForUpdateMultiMessage(networkId, message) : message.data;
+
+    // Ignore messages relating to users who have disconnected since freezing, their entities
+    // will have aleady been removed by NAF.
+    // Note that delete messages have no "owner" so we have to check for that as well.
+    if (data.owner && !this.occupants[data.owner]) return null;
+
+    // Ignore messages from users that we may have blocked while frozen.
+    if (data.owner && this.blockedClients.has(data.owner)) return null;
+
+    return data
+  }
+
+  // Used externally
+  getPendingDataForNetworkId(networkId) {
+    return this.getPendingData(networkId, this.frozenUpdates.get(networkId));
+  }
+
   flushPendingUpdates() {
     for (const [networkId, message] of this.frozenUpdates) {
-      let data;
-      let dataType;
+      let data = this.getPendingData(networkId, message);
+      if (!data) continue;
 
-      if (message.dataType === "um") {
-        data = this.dataForUpdateMultiMessage(networkId, message);
-        dataType = "u";
-      } else {
-        dataType = message.dataType;
-        data = message.data;
-      }
-
-      // Ignore messages relating to users who have disconnected since freezing, their entities
-      // will have aleady been removed by NAF.
-      // Note that delete messages have no "owner" so we have to check for that as well.
-      if (data.owner && !this.occupants[data.owner]) continue;
-
-      // Ignore messages from users that we may have blocked while frozen.
-      if (data.owner && this.blockedClients.has(data.owner)) continue;
+      // Override the data type on "um" messages types, since we squash updates in storeSingleMessage.
+      const dataType = message.dataType === "um" ? "u" : message.dataType;
 
       this.onOccupantMessage(null, dataType, data, message.source);
     }
