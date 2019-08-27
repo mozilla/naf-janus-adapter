@@ -4,7 +4,6 @@ var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
 var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
 function debounce(fn) {
   var curr = Promise.resolve();
@@ -347,12 +346,6 @@ class JanusAdapter {
         var local = offer.then(o => conn.setLocalDescription(o));
         var remote = offer;
 
-        if (isSafari && iOS) {
-          // On Safari, WebRTC negotiation fails easily if we do not pause before sending
-          // a new offer to Janus here.
-          remote = remote.then(o => new Promise(r => setTimeout(() => r(o), 5000)));
-        }
-
         remote = remote.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
         return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
       })
@@ -539,6 +532,13 @@ class JanusAdapter {
       conn.close();
       console.warn(occupantId + ": cancel occupant connection, occupant left during or after webrtcup");
       return null;
+    }
+
+    if (isSafari && !this._iOSHackDelayedInitialPeer) {
+      // HACK: the first peer on Safari during page load can fail to work if we don't
+      // wait some time before continuing here. See: https://github.com/mozilla/hubs/pull/1692
+      await (new Promise((resolve) => setTimeout(resolve, 3000)));
+      this._iOSHackDelayedInitialPeer = true;
     }
 
     var mediaStream = new MediaStream();
@@ -786,7 +786,7 @@ class JanusAdapter {
     }
   }
 
-  setLocalMediaStream(stream) {
+  async setLocalMediaStream(stream) {
     // our job here is to make sure the connection winds up with RTP senders sending the stuff in this stream,
     // and not the stuff that isn't in this stream. strategy is to replace existing tracks if we can, add tracks
     // that we can't replace, and disable tracks that don't exist anymore.
@@ -795,25 +795,29 @@ class JanusAdapter {
     // can't wind up with a SDP that has >1 audio or >1 video tracks, even if one of them is inactive (what you get if
     // you remove a track from an existing stream.)
     if (this.publisher && this.publisher.conn) {
-      var existingSenders = this.publisher.conn.getSenders();
-      var newSenders = [];
-      stream.getTracks().forEach(t => {
-        var sender = existingSenders.find(s => s.track != null && s.track.kind == t.kind);
+      const existingSenders = this.publisher.conn.getSenders();
+      const newSenders = [];
+      const tracks = stream.getTracks();
+
+      for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        const sender = existingSenders.find(s => s.track != null && s.track.kind == t.kind);
+
         if (sender != null) {
           if (sender.replaceTrack) {
-            sender.replaceTrack(t);
-            sender.track.enabled = true;
+            await sender.replaceTrack(t);
           } else {
-            // replaceTrack isn't implemented in Chrome, even via webrtc-adapter.
+            // Fallback for browsers that don't support replaceTrack. At this time of this writing
+            // most browsers support it, and testing this code path seems to not work properly
+            // in Chrome anymore.
             stream.removeTrack(sender.track);
             stream.addTrack(t);
-            t.enabled = true;
           }
           newSenders.push(sender);
         } else {
           newSenders.push(this.publisher.conn.addTrack(t, stream));
         }
-      });
+      }
       existingSenders.forEach(s => {
         if (!newSenders.includes(s)) {
           s.track.enabled = false;
