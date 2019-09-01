@@ -815,6 +815,12 @@ class JanusAdapter {
         if (sender != null) {
           if (sender.replaceTrack) {
             await sender.replaceTrack(t);
+
+            // Workaround https://bugzilla.mozilla.org/show_bug.cgi?id=1576771
+            if (navigator.userAgent.toLowerCase().indexOf('firefox') > -1) {
+              t.enabled = false;
+              setTimeout(() => t.enabled = true, 1000);
+            }
           } else {
             // Fallback for browsers that don't support replaceTrack. At this time of this writing
             // most browsers support it, and testing this code path seems to not work properly
