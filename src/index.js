@@ -819,7 +819,7 @@ class JanusAdapter {
             // Workaround https://bugzilla.mozilla.org/show_bug.cgi?id=1576771
             if (navigator.userAgent.toLowerCase().indexOf('firefox') > -1 && t.enabled) {
               t.enabled = false;
-              setTimeout(() => t.enabled = true, 1000);
+              this.reenableTimeout = setTimeout(() => t.enabled = true, 1000);
             }
           } else {
             // Fallback for browsers that don't support replaceTrack. At this time of this writing
@@ -844,6 +844,10 @@ class JanusAdapter {
   }
 
   enableMicrophone(enabled) {
+    if (this.reenableTimeout) {
+      clearTimeout(this.reenableTimeout);
+      this.reenableTimeout = null;
+    }
     if (this.publisher && this.publisher.conn) {
       this.publisher.conn.getSenders().forEach(s => {
         if (s.track.kind == "audio") {
