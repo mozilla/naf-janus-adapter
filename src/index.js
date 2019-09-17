@@ -817,7 +817,7 @@ class JanusAdapter {
             await sender.replaceTrack(t);
 
             // Workaround https://bugzilla.mozilla.org/show_bug.cgi?id=1576771
-            if (navigator.userAgent.toLowerCase().indexOf('firefox') > -1 && t.enabled) {
+            if (t.kind === "video" && t.enabled && navigator.userAgent.toLowerCase().indexOf('firefox') > -1) {
               t.enabled = false;
               setTimeout(() => t.enabled = true, 1000);
             }
