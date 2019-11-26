@@ -342,11 +342,14 @@ class JanusAdapter {
       "negotiationneeded",
       debounce(ev => {
         debug("Sending new offer for handle: %o", handle);
-        var offer = conn.createOffer().then(this.configurePublisherSdp);
+        var offer = conn.createOffer().then(this.configurePublisherSdp).then(this.fixSafariIceUFrag);
         var local = offer.then(o => conn.setLocalDescription(o));
         var remote = offer;
 
-        remote = remote.then(j => handle.sendJsep(j)).then(r => conn.setRemoteDescription(r.jsep));
+        remote = remote
+          .then(this.fixSafariIceUFrag)
+          .then(j => handle.sendJsep(j))
+          .then(r => conn.setRemoteDescription(r.jsep));
         return Promise.all([local, remote]).catch(e => error("Error negotiating offer: %o", e));
       })
     );
@@ -356,7 +359,10 @@ class JanusAdapter {
         var jsep = ev.jsep;
         if (jsep && jsep.type == "offer") {
           debug("Accepting new offer for handle: %o", handle);
-          var answer = conn.setRemoteDescription(this.configureSubscriberSdp(jsep)).then(_ => conn.createAnswer());
+          var answer = conn
+            .setRemoteDescription(this.configureSubscriberSdp(jsep))
+            .then(_ => conn.createAnswer())
+            .then(this.fixSafariIceUFrag);
           var local = answer.then(a => conn.setLocalDescription(a));
           var remote = answer.then(j => handle.sendJsep(j));
           return Promise.all([local, remote]).catch(e => error("Error negotiating answer: %o", e));
@@ -478,6 +484,12 @@ class JanusAdapter {
       );
     }
     return jsep;
+  }
+
+  async fixSafariIceUFrag(jsep) {
+    // Safari produces a \n instead of an \r\n for the ice-ufrag. See https://github.com/meetecho/janus-gateway/issues/1818
+    jsep.sdp = jsep.sdp.replace(/[^\r]\na=ice-ufrag/g, "\r\na=ice-ufrag");
+    return jsep
   }
 
   async createSubscriber(occupantId) {
