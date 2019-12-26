@@ -190,6 +190,7 @@ class JanusAdapter {
     clearTimeout(this.reconnectionTimeout);
 
     this.removeAllOccupants();
+    this.leftOccupants = new Set();
 
     if (this.publisher) {
       // Close the publisher peer connection. Which also detaches the plugin handle.
