@@ -232,7 +232,7 @@ class JanusAdapter {
       const occupantId = this.publisher.initialOccupants[i];
       if (occupantId === this.clientId) continue; // Happens during non-graceful reconnects due to zombie sessions
 
-      await this.addOccupant(this.publisher.initialOccupants[i]);
+      await this.addOccupant(occupantId);
     }
   }
 
