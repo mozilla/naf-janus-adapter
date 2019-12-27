@@ -282,30 +282,23 @@ class JanusAdapter {
   }
 
   async addOccupant(occupantId) {
-    console.log("Create sub " + occupantId);
     if (this.occupants[occupantId]) {
       this.removeOccupant(occupantId);
-      this.leftOccupants.delete(occupantId);
     }
+
+    this.leftOccupants.delete(occupantId);
+
     var subscriber = await this.createSubscriber(occupantId);
-    console.log(subscriber);
 
     if (!subscriber) return;
 
-    console.log("set occupant " + occupantId);
     this.occupants[occupantId] = subscriber;
-    console.log(this.occupants);
-    console.log(subscriber.mediaStream);
-    console.log(subscriber.mediaStream.getAudioTracks()[0]);
 
     this.setMediaStream(occupantId, subscriber.mediaStream);
-    console.log(this.occupants);
 
     // Call the Networked AFrame callbacks for the new occupant.
     this.onOccupantConnected(occupantId);
     this.onOccupantsChanged(this.occupants);
-    console.log(this.occupants);
-    console.log(subscriber);
 
     return subscriber;
   }
