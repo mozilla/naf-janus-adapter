@@ -229,6 +229,9 @@ class JanusAdapter {
     this.connectSuccess(this.clientId);
 
     for (let i = 0; i < this.publisher.initialOccupants.length; i++) {
+      const occupantId = this.publisher.initialOccupants[i];
+      if (occupantId === this.clientId) continue; // Happens during non-graceful reconnects due to zombie sessions
+
       await this.addOccupant(this.publisher.initialOccupants[i]);
     }
   }
@@ -268,6 +271,9 @@ class JanusAdapter {
             new Error("Connection could not be reestablished, exceeded maximum number of reconnection attempts.")
           );
         }
+
+        console.warn("Error during reconnect, retrying.");
+        console.warn(error);
 
         if (this.onReconnecting) {
           this.onReconnecting(this.reconnectionDelay);
@@ -450,6 +456,19 @@ class JanusAdapter {
     }
 
     var initialOccupants = message.plugindata.data.response.users[this.room] || [];
+
+    if (initialOccupants.includes(this.clientId)) {
+      console.warn("Janus still has previous session for this client. Reconnecting in 10s.");
+
+      if (this.zombieReconnectTimeout) {
+        clearTimeout(this.zombieReconnectTimeout);
+      }
+
+      this.zombieReconnectTimeout = setTimeout(() => {
+        this.zombieReconnectTimeout = null;
+        this.reconnect();
+      }, 10000);
+    }
 
     debug("publisher ready");
     return {
