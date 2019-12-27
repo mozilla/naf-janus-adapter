@@ -283,6 +283,17 @@ class JanusAdapter {
       });
   }
 
+  performDelayedReconnect() {
+    if (this.delayedReconnectTimeout) {
+      clearTimeout(this.delayedReconnectTimeout);
+    }
+
+    this.delayedReconnectTimeout = setTimeout(() => {
+      this.delayedReconnectTimeout = null;
+      this.reconnect();
+    }, 10000);
+  }
+
   onWebsocketMessage(event) {
     this.session.receive(JSON.parse(event.data));
   }
@@ -346,6 +357,12 @@ class JanusAdapter {
     conn.addEventListener("icecandidate", ev => {
       handle.sendTrickle(ev.candidate || null).catch(e => error("Error trickling ICE: %o", e));
     });
+    conn.addEventListener("iceconnectionstatechange", ev => {
+      if (conn.iceConnectionState === "failed") {
+        console.warn("ICE failure detected. Reconnecting in 10s.");
+        this.performDelayedReconnect();
+      }
+    })
 
     // we have to debounce these because janus gets angry if you send it a new SDP before
     // it's finished processing an existing SDP. in actuality, it seems like this is maybe
@@ -459,15 +476,7 @@ class JanusAdapter {
 
     if (initialOccupants.includes(this.clientId)) {
       console.warn("Janus still has previous session for this client. Reconnecting in 10s.");
-
-      if (this.zombieReconnectTimeout) {
-        clearTimeout(this.zombieReconnectTimeout);
-      }
-
-      this.zombieReconnectTimeout = setTimeout(() => {
-        this.zombieReconnectTimeout = null;
-        this.reconnect();
-      }, 10000);
+      this.performDelayedReconnect();
     }
 
     debug("publisher ready");
