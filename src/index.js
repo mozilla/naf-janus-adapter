@@ -5,6 +5,8 @@ var warn = require("debug")("naf-janus-adapter:warn");
 var error = require("debug")("naf-janus-adapter:error");
 var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
+const SUBSCRIBE_TIMEOUT_MS = 15000;
+
 function debounce(fn) {
   var curr = Promise.resolve();
   return function() {
@@ -228,12 +230,15 @@ class JanusAdapter {
     // Call the naf connectSuccess callback before we start receiving WebRTC messages.
     this.connectSuccess(this.clientId);
 
+    const addOccupantPromises = [];
+
     for (let i = 0; i < this.publisher.initialOccupants.length; i++) {
       const occupantId = this.publisher.initialOccupants[i];
       if (occupantId === this.clientId) continue; // Happens during non-graceful reconnects due to zombie sessions
-
-      await this.addOccupant(occupantId);
+      addOccupantPromises.push(this.addOccupant(occupantId));
     }
+
+    await Promise.all(addOccupantPromises);
   }
 
   onWebsocketClose(event) {
@@ -549,6 +554,29 @@ class JanusAdapter {
       return null;
     }
 
+    let webrtcFailed = false;
+
+    const webrtcup = new Promise(resolve => {
+      const leftInterval = setInterval(() => {
+        if (this.leftOccupants.has(occupantId)) {
+          clearInterval(leftInterval);
+          resolve();
+        }
+      }, 1000);
+
+      const timeout = setTimeout(() => {
+        clearInterval(leftInterval);
+        webrtcFailed = true;
+        resolve();
+      }, SUBSCRIBE_TIMEOUT_MS);
+
+      handle.on("webrtcup", () => {
+        clearTimeout(timeout);
+        clearInterval(leftInterval);
+        resolve();
+      });
+    });
+
     // Send join message to janus. Don't listen for join/leave messages. Subscribe to the occupant's media.
     // Janus should send us an offer for this occupant's media in response to this.
     const resp = await this.sendJoin(handle, { media: occupantId });
@@ -560,24 +588,17 @@ class JanusAdapter {
     }
 
     debug(occupantId + ": sub waiting for webrtcup");
-
-    await new Promise(resolve => {
-      const interval = setInterval(() => {
-        if (this.leftOccupants.has(occupantId)) {
-          clearInterval(interval);
-          resolve();
-        }
-      }, 1000);
-
-      handle.on("webrtcup", () => {
-        clearInterval(interval);
-        resolve();
-      });
-    });
+    await webrtcup;
 
     if (this.leftOccupants.has(occupantId)) {
       conn.close();
       console.warn(occupantId + ": cancel occupant connection, occupant left during or after webrtcup");
+      return null;
+    }
+
+    if (webrtcFailed) {
+      conn.close();
+      console.warn(occupantId + ": webrtc up timed out");
       return null;
     }
 
