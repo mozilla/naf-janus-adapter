@@ -31,6 +31,6 @@
     "build:dev": "webpack --config webpack.dev.js",
     "build:prod": "webpack --config webpack.prod.js",
     "lint": "eslint 'src/**/*.js'",
-    "release": "npm run build && git commit --allow-empty -am 'update builds' && git push && np --any-branch && git push"
+    "release": "npm run build && git commit --allow-empty -am 'update builds' && git push && np && git push"
   }
 }
