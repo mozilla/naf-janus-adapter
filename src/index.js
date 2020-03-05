@@ -7,6 +7,10 @@ var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const SUBSCRIBE_TIMEOUT_MS = 15000;
 
+function bytes(s) {
+  return ~-encodeURI(s).split(/%..|./).length;
+}
+
 function debounce(fn) {
   var curr = Promise.resolve();
   return function() {
@@ -107,6 +111,19 @@ class JanusAdapter {
     this.onWebsocketMessage = this.onWebsocketMessage.bind(this);
     this.onDataChannelMessage = this.onDataChannelMessage.bind(this);
     this.onData = this.onData.bind(this);
+
+    this.byteTotal = 0;
+    this.messagesTotal = 0;
+    var time = performance.now();
+    setInterval(() => {
+      // console.log("bytes per second:", this.byteTotal / (performance.now() - time));
+      var delta = (performance.now() - time) / 1000;
+      window.bps = this.byteTotal / delta;
+      window.msgs = this.messagesTotal / delta;
+      time = performance.now();
+      this.byteTotal = 0;
+      this.messagesTotal = 0;
+    }, 10000);
   }
 
   setServerUrl(url) {
@@ -367,7 +384,7 @@ class JanusAdapter {
         console.warn("ICE failure detected. Reconnecting in 10s.");
         this.performDelayedReconnect();
       }
-    })
+    });
 
     // we have to debounce these because janus gets angry if you send it a new SDP before
     // it's finished processing an existing SDP. in actuality, it seems like this is maybe
@@ -377,7 +394,10 @@ class JanusAdapter {
       "negotiationneeded",
       debounce(ev => {
         debug("Sending new offer for handle: %o", handle);
-        var offer = conn.createOffer().then(this.configurePublisherSdp).then(this.fixSafariIceUFrag);
+        var offer = conn
+          .createOffer()
+          .then(this.configurePublisherSdp)
+          .then(this.fixSafariIceUFrag);
         var local = offer.then(o => conn.setLocalDescription(o));
         var remote = offer;
 
@@ -529,7 +549,7 @@ class JanusAdapter {
   async fixSafariIceUFrag(jsep) {
     // Safari produces a \n instead of an \r\n for the ice-ufrag. See https://github.com/meetecho/janus-gateway/issues/1818
     jsep.sdp = jsep.sdp.replace(/[^\r]\na=ice-ufrag/g, "\r\na=ice-ufrag");
-    return jsep
+    return jsep;
   }
 
   async createSubscriber(occupantId) {
@@ -605,7 +625,7 @@ class JanusAdapter {
     if (isSafari && !this._iOSHackDelayedInitialPeer) {
       // HACK: the first peer on Safari during page load can fail to work if we don't
       // wait some time before continuing here. See: https://github.com/mozilla/hubs/pull/1692
-      await (new Promise((resolve) => setTimeout(resolve, 3000)));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       this._iOSHackDelayedInitialPeer = true;
     }
 
@@ -683,7 +703,7 @@ class JanusAdapter {
     // Ignore messages from users that we may have blocked while frozen.
     if (data.owner && this.blockedClients.has(data.owner)) return null;
 
-    return data
+    return data;
   }
 
   // Used externally
@@ -706,7 +726,8 @@ class JanusAdapter {
   }
 
   storeMessage(message) {
-    if (message.dataType === "um") { // UpdateMulti
+    if (message.dataType === "um") {
+      // UpdateMulti
       for (let i = 0, l = message.data.d.length; i < l; i++) {
         this.storeSingleMessage(message, i);
       }
@@ -726,7 +747,8 @@ class JanusAdapter {
       this.frozenUpdates.set(networkId, message);
     } else {
       const storedMessage = this.frozenUpdates.get(networkId);
-      const storedData = storedMessage.dataType === "um" ? this.dataForUpdateMultiMessage(networkId, storedMessage) : storedMessage.data;
+      const storedData =
+        storedMessage.dataType === "um" ? this.dataForUpdateMultiMessage(networkId, storedMessage) : storedMessage.data;
 
       // Avoid updating components if the entity data received did not come from the current owner.
       const isOutdatedMessage = data.lastOwnerTime < storedData.lastOwnerTime;
@@ -885,9 +907,9 @@ class JanusAdapter {
             await sender.replaceTrack(t);
 
             // Workaround https://bugzilla.mozilla.org/show_bug.cgi?id=1576771
-            if (t.kind === "video" && t.enabled && navigator.userAgent.toLowerCase().indexOf('firefox') > -1) {
+            if (t.kind === "video" && t.enabled && navigator.userAgent.toLowerCase().indexOf("firefox") > -1) {
               t.enabled = false;
-              setTimeout(() => t.enabled = true, 1000);
+              setTimeout(() => (t.enabled = true), 1000);
             }
           } else {
             // Fallback for browsers that don't support replaceTrack. At this time of this writing
@@ -957,18 +979,30 @@ class JanusAdapter {
     }
   }
 
+  logBytes(header, data) {
+    var b = bytes(data);
+    // console.log(data);
+    // console.log(header, b);
+    this.byteTotal += b;
+    this.messagesTotal++;
+  }
+
   broadcastData(dataType, data) {
     if (!this.publisher) {
       console.warn("broadcastData called without a publisher");
     } else {
+      const body = JSON.stringify({ dataType, data });
       switch (this.unreliableTransport) {
         case "websocket":
-          this.publisher.handle.sendMessage({ kind: "data", body: JSON.stringify({ dataType, data }) });
+          this.logBytes("u ws", body);
+          this.publisher.handle.sendMessage({ kind: "data", body });
           break;
         case "datachannel":
-          this.publisher.unreliableChannel.send(JSON.stringify({ dataType, data }));
+          this.logBytes("u dc", body);
+          this.publisher.unreliableChannel.send(body);
           break;
         default:
+          this.logBytes("u px", body);
           this.unreliableTransport(undefined, dataType, data);
           break;
       }
@@ -979,14 +1013,18 @@ class JanusAdapter {
     if (!this.publisher) {
       console.warn("broadcastDataGuaranteed called without a publisher");
     } else {
+      const body = JSON.stringify({ dataType, data });
       switch (this.reliableTransport) {
         case "websocket":
-          this.publisher.handle.sendMessage({ kind: "data", body: JSON.stringify({ dataType, data }) });
+          this.logBytes("r ws", body);
+          this.publisher.handle.sendMessage({ kind: "data", body });
           break;
         case "datachannel":
+          this.logBytes("r dc", body);
           this.publisher.reliableChannel.send(JSON.stringify({ dataType, data }));
           break;
         default:
+          this.logBytes("r px", body);
           this.reliableTransport(undefined, dataType, data);
           break;
       }
@@ -994,9 +1032,11 @@ class JanusAdapter {
   }
 
   kick(clientId, permsToken) {
-    return this.publisher.handle.sendMessage({ kind: "kick", room_id: this.room, user_id: clientId, token: permsToken }).then(() => {
-      document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: clientId } }));
-    });
+    return this.publisher.handle
+      .sendMessage({ kind: "kick", room_id: this.room, user_id: clientId, token: permsToken })
+      .then(() => {
+        document.body.dispatchEvent(new CustomEvent("kicked", { detail: { clientId: clientId } }));
+      });
   }
 
   block(clientId) {
