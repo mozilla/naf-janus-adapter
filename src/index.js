@@ -161,7 +161,7 @@ class JanusAdapter {
     const websocketConnection = new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.serverUrl, "janus-protocol");
 
-      this.session = new mj.JanusSession(this.ws.send.bind(this.ws));
+      this.session = new mj.JanusSession(this.ws.send.bind(this.ws), { timeoutMs: 30000 });
 
       let onOpen;
 
