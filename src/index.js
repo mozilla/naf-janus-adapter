@@ -60,7 +60,7 @@ const OPUS_PARAMETERS = {
   "sprop-stereo": 0
 };
 
-const PEER_CONNECTION_CONFIG = {
+const DEFAULT_PEER_CONNECTION_CONFIG = {
   iceServers: [{ urls: "stun:stun1.l.google.com:19302" }, { urls: "stun:stun2.l.google.com:19302" }]
 };
 
@@ -75,6 +75,7 @@ class JanusAdapter {
 
     this.serverUrl = null;
     this.webRtcOptions = {};
+    this.peerConnectionConfig = null;
     this.ws = null;
     this.session = null;
     this.reliableTransport = "datachannel";
@@ -129,6 +130,10 @@ class JanusAdapter {
 
   setWebRtcOptions(options) {
     this.webRtcOptions = options;
+  }
+
+  setPeerConnectionConfig(peerConnectionConfig) {
+    this.peerConnectionConfig = peerConnectionConfig;
   }
 
   setServerConnectListeners(successListener, failureListener) {
@@ -411,7 +416,7 @@ class JanusAdapter {
 
   async createPublisher() {
     var handle = new mj.JanusPluginHandle(this.session);
-    var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
+    var conn = new RTCPeerConnection(this.peerConnectionConfig || DEFAULT_PEER_CONNECTION_CONFIG);
 
     debug("pub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
@@ -539,7 +544,7 @@ class JanusAdapter {
     }
 
     var handle = new mj.JanusPluginHandle(this.session);
-    var conn = new RTCPeerConnection(PEER_CONNECTION_CONFIG);
+    var conn = new RTCPeerConnection(this.peerConnectionConfig || DEFAULT_PEER_CONNECTION_CONFIG);
 
     debug(occupantId + ": sub waiting for sfu");
     await handle.attach("janus.plugin.sfu");
