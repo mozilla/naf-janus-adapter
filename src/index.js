@@ -368,7 +368,7 @@ class JanusAdapter {
       handle.sendTrickle(ev.candidate || null).catch(e => error("Error trickling ICE: %o", e));
     });
     conn.addEventListener("iceconnectionstatechange", ev => {
-      if (conn.iceConnectionState === "failed") {
+      if (conn.iceConnectionState === "failed" || conn.iceConnectionState === "disconnected") {
         console.warn("ICE failure detected. Reconnecting in 10s.");
         this.performDelayedReconnect();
       }
