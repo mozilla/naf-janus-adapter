@@ -92,7 +92,6 @@ class JanusAdapter {
     this.publisher = null;
     this.occupantIds = [];
     this.occupants = {};
-    window.occupants = this.occupants;
     this.mediaStreams = {};
     this.localMediaStream = null;
     this.pendingMediaRequests = new Map();
@@ -354,22 +353,21 @@ class JanusAdapter {
 
   async addOccupant(occupantId) {
     this.pendingOccupants.add(occupantId);
-   this.createSubscriber(occupantId).then(subscriber => {
-      if (subscriber) {
-        if(!this.pendingOccupants.has(occupantId)) {
-          subscriber.conn.close();
-        } else {
-          this.pendingOccupants.delete(occupantId);
-          this.occupantIds.push(occupantId);
-          this.occupants[occupantId] = subscriber;
+    const subscriber = await this.createSubscriber(occupantId);
+    if (subscriber) {
+      if(!this.pendingOccupants.has(occupantId)) {
+        subscriber.conn.close();
+      } else {
+        this.pendingOccupants.delete(occupantId);
+        this.occupantIds.push(occupantId);
+        this.occupants[occupantId] = subscriber;
 
-          this.setMediaStream(occupantId, subscriber.mediaStream);
+        this.setMediaStream(occupantId, subscriber.mediaStream);
 
-          // Call the Networked AFrame callbacks for the new occupant.
-          this.onOccupantConnected(occupantId);
-        }
+        // Call the Networked AFrame callbacks for the new occupant.
+        this.onOccupantConnected(occupantId);
       }
-   });
+    }
   }
 
   removeAllOccupants() {
@@ -607,7 +605,7 @@ class JanusAdapter {
 
     const webrtcup = new Promise(resolve => {
       const leftInterval = setInterval(() => {
-        if (this.availableOccupants.indexOf(occupantId) !== -1) {
+        if (this.availableOccupants.indexOf(occupantId) === -1) {
           clearInterval(leftInterval);
           resolve();
         }
