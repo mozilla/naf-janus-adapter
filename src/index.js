@@ -373,7 +373,7 @@ class JanusAdapter {
   removeAllOccupants() {
     this.pendingOccupants.clear();
     for (let i = this.occupantIds.length - 1; i >= 0; i--) {
-      this.removeOccupant(occupantIds[i]);
+      this.removeOccupant(this.occupantIds[i]);
     }
   }
 
@@ -888,6 +888,9 @@ class JanusAdapter {
 
         this.pendingMediaRequests.get(clientId).audio.promise = audioPromise;
         this.pendingMediaRequests.get(clientId).video.promise = videoPromise;
+
+        audioPromise.catch(e => console.warn(clientId, e));
+        videoPromise.catch(e => console.warn(clientId, e));
       }
       return this.pendingMediaRequests.get(clientId)[type].promise;
     }
@@ -897,9 +900,19 @@ class JanusAdapter {
     // Safari doesn't like it when you use single a mixed media stream where one of the tracks is inactive, so we
     // split the tracks into two streams.
     const audioStream = new MediaStream();
+    try {
     stream.getAudioTracks().forEach(track => audioStream.addTrack(track));
+
+    } catch(e) {
+      console.warn(`${clientId} setMediaStream Audio Error`, e);
+    }
     const videoStream = new MediaStream();
+    try {
     stream.getVideoTracks().forEach(track => videoStream.addTrack(track));
+
+    } catch (e) {
+      console.warn(`${clientId} setMediaStream Video Error`, e);
+    }
 
     this.mediaStreams[clientId] = { audio: audioStream, video: videoStream };
 
