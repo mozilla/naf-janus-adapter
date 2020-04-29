@@ -7,6 +7,16 @@ var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const SUBSCRIBE_TIMEOUT_MS = 15000;
 
+const AVAILABLE_OCCUPANTS_THRESHHOLD = 24;
+const MAX_SUBSCRIBE_DELAY = 3000;
+
+function randomDelay(min, max) {
+  return new Promise(resolve => {
+    const delay = Math.random() * (max - min) + min;
+    setTimeout(resolve, delay);
+  });
+}
+
 function debounce(fn) {
   var curr = Promise.resolve();
   return function() {
@@ -352,6 +362,11 @@ class JanusAdapter {
   }
 
   async addOccupant(occupantId) {
+    const availableOccupantsCount = this.availableOccupants.length;
+    if (availableOccupantsCount > AVAILABLE_OCCUPANTS_THRESHHOLD) {
+      const max = Math.min(1, ((availableOccupantsCount - AVAILABLE_OCCUPANTS_THRESHHOLD) / AVAILABLE_OCCUPANTS_THRESHHOLD)) * MAX_SUBSCRIBE_DELAY;
+      await randomDelay(0, max);
+    }
     this.pendingOccupants.add(occupantId);
     const subscriber = await this.createSubscriber(occupantId);
     if (subscriber) {
@@ -889,8 +904,8 @@ class JanusAdapter {
         this.pendingMediaRequests.get(clientId).audio.promise = audioPromise;
         this.pendingMediaRequests.get(clientId).video.promise = videoPromise;
 
-        audioPromise.catch(e => console.warn(clientId, e));
-        videoPromise.catch(e => console.warn(clientId, e));
+        audioPromise.catch(e => console.warn(`${clientId} getMediaStream Audio Error`, e));
+        videoPromise.catch(e => console.warn(`${clientId} getMediaStream Video Error`, e));
       }
       return this.pendingMediaRequests.get(clientId)[type].promise;
     }
