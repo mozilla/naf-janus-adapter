@@ -362,12 +362,14 @@ class JanusAdapter {
   }
 
   async addOccupant(occupantId) {
+    this.pendingOccupants.add(occupantId);
+    
     const availableOccupantsCount = this.availableOccupants.length;
     if (availableOccupantsCount > AVAILABLE_OCCUPANTS_THRESHHOLD) {
       const max = Math.min(1, ((availableOccupantsCount - AVAILABLE_OCCUPANTS_THRESHHOLD) / AVAILABLE_OCCUPANTS_THRESHHOLD)) * MAX_SUBSCRIBE_DELAY;
       await randomDelay(0, max);
     }
-    this.pendingOccupants.add(occupantId);
+  
     const subscriber = await this.createSubscriber(occupantId);
     if (subscriber) {
       if(!this.pendingOccupants.has(occupantId)) {
