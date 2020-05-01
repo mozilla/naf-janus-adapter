@@ -366,8 +366,7 @@ class JanusAdapter {
     
     const availableOccupantsCount = this.availableOccupants.length;
     if (availableOccupantsCount > AVAILABLE_OCCUPANTS_THRESHHOLD) {
-      const max = Math.min(1, ((availableOccupantsCount - AVAILABLE_OCCUPANTS_THRESHHOLD) / AVAILABLE_OCCUPANTS_THRESHHOLD)) * MAX_SUBSCRIBE_DELAY;
-      await randomDelay(0, max);
+      await randomDelay(0, MAX_SUBSCRIBE_DELAY);
     }
   
     const subscriber = await this.createSubscriber(occupantId);
