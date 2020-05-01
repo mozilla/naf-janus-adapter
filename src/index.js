@@ -7,8 +7,8 @@ var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const SUBSCRIBE_TIMEOUT_MS = 15000;
 
-const AVAILABLE_OCCUPANTS_THRESHHOLD = 24;
-const MAX_SUBSCRIBE_DELAY = 3000;
+const AVAILABLE_OCCUPANTS_THRESHOLD = 5;
+const MAX_SUBSCRIBE_DELAY = 5000;
 
 function randomDelay(min, max) {
   return new Promise(resolve => {
@@ -365,7 +365,7 @@ class JanusAdapter {
     this.pendingOccupants.add(occupantId);
     
     const availableOccupantsCount = this.availableOccupants.length;
-    if (availableOccupantsCount > AVAILABLE_OCCUPANTS_THRESHHOLD) {
+    if (availableOccupantsCount > AVAILABLE_OCCUPANTS_THRESHOLD) {
       await randomDelay(0, MAX_SUBSCRIBE_DELAY);
     }
   
