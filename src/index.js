@@ -7,6 +7,16 @@ var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 const SUBSCRIBE_TIMEOUT_MS = 15000;
 
+const AVAILABLE_OCCUPANTS_THRESHOLD = 5;
+const MAX_SUBSCRIBE_DELAY = 5000;
+
+function randomDelay(min, max) {
+  return new Promise(resolve => {
+    const delay = Math.random() * (max - min) + min;
+    setTimeout(resolve, delay);
+  });
+}
+
 function debounce(fn) {
   var curr = Promise.resolve();
   return function() {
@@ -90,11 +100,15 @@ class JanusAdapter {
     this.reconnectionAttempts = 0;
 
     this.publisher = null;
+    this.occupantIds = [];
     this.occupants = {};
-    this.leftOccupants = new Set();
     this.mediaStreams = {};
     this.localMediaStream = null;
     this.pendingMediaRequests = new Map();
+
+    this.pendingOccupants = new Set();
+    this.availableOccupants = [];
+    this.requestedOccupants = null;
 
     this.blockedClients = new Map();
     this.frozenUpdates = new Map();
@@ -197,7 +211,6 @@ class JanusAdapter {
     clearTimeout(this.reconnectionTimeout);
 
     this.removeAllOccupants();
-    this.leftOccupants = new Set();
 
     if (this.publisher) {
       // Close the publisher peer connection. Which also detaches the plugin handle.
@@ -235,15 +248,13 @@ class JanusAdapter {
     // Call the naf connectSuccess callback before we start receiving WebRTC messages.
     this.connectSuccess(this.clientId);
 
-    const addOccupantPromises = [];
-
     for (let i = 0; i < this.publisher.initialOccupants.length; i++) {
       const occupantId = this.publisher.initialOccupants[i];
       if (occupantId === this.clientId) continue; // Happens during non-graceful reconnects due to zombie sessions
-      addOccupantPromises.push(this.addOccupant(occupantId));
+      this.addAvailableOccupant(occupantId);
     }
 
-    await Promise.all(addOccupantPromises);
+    this.syncOccupants();
   }
 
   onWebsocketClose(event) {
@@ -308,59 +319,104 @@ class JanusAdapter {
     this.session.receive(JSON.parse(event.data));
   }
 
-  async addOccupant(occupantId) {
-    if (this.occupants[occupantId]) {
-      this.removeOccupant(occupantId);
+  addAvailableOccupant(occupantId) {
+    if (this.availableOccupants.indexOf(occupantId) === -1) {
+      this.availableOccupants.push(occupantId);
+    }
+  }
+
+  removeAvailableOccupant(occupantId) {
+    const idx = this.availableOccupants.indexOf(occupantId);
+    if (idx !== -1) {
+      this.availableOccupants.splice(idx, 1);
+    }
+  }
+
+  syncOccupants(requestedOccupants) {
+    if (requestedOccupants) {
+      this.requestedOccupants = requestedOccupants;
     }
 
-    this.leftOccupants.delete(occupantId);
+    if (!this.requestedOccupants) {
+      return;
+    }
 
-    var subscriber = await this.createSubscriber(occupantId);
+    // Add any requested, available, and non-pending occupants.
+    for (let i = 0; i < this.requestedOccupants.length; i++) {
+      const occupantId = this.requestedOccupants[i];
+      if (!this.occupants[occupantId] && this.availableOccupants.indexOf(occupantId) !== -1 && !this.pendingOccupants.has(occupantId)) {
+        this.addOccupant(occupantId);
+      }
+    }
 
-    if (!subscriber) return;
+    // Remove any unrequested and currently added occupants.
+    for (let j = 0; j < this.availableOccupants.length; j++) {
+      const occupantId = this.availableOccupants[j];
+      if (this.occupants[occupantId] && this.requestedOccupants.indexOf(occupantId) === -1) {
+        this.removeOccupant(occupantId);
+      }
+    }
 
-    this.occupants[occupantId] = subscriber;
-
-    this.setMediaStream(occupantId, subscriber.mediaStream);
-
-    // Call the Networked AFrame callbacks for the new occupant.
-    this.onOccupantConnected(occupantId);
+    // Call the Networked AFrame callbacks for the updated occupants list.
     this.onOccupantsChanged(this.occupants);
+  }
 
-    return subscriber;
+  async addOccupant(occupantId) {
+    this.pendingOccupants.add(occupantId);
+    
+    const availableOccupantsCount = this.availableOccupants.length;
+    if (availableOccupantsCount > AVAILABLE_OCCUPANTS_THRESHOLD) {
+      await randomDelay(0, MAX_SUBSCRIBE_DELAY);
+    }
+  
+    const subscriber = await this.createSubscriber(occupantId);
+    if (subscriber) {
+      if(!this.pendingOccupants.has(occupantId)) {
+        subscriber.conn.close();
+      } else {
+        this.pendingOccupants.delete(occupantId);
+        this.occupantIds.push(occupantId);
+        this.occupants[occupantId] = subscriber;
+
+        this.setMediaStream(occupantId, subscriber.mediaStream);
+
+        // Call the Networked AFrame callbacks for the new occupant.
+        this.onOccupantConnected(occupantId);
+      }
+    }
   }
 
   removeAllOccupants() {
-    for (const occupantId of Object.getOwnPropertyNames(this.occupants)) {
-      this.removeOccupant(occupantId);
+    this.pendingOccupants.clear();
+    for (let i = this.occupantIds.length - 1; i >= 0; i--) {
+      this.removeOccupant(this.occupantIds[i]);
     }
   }
 
   removeOccupant(occupantId) {
-    this.leftOccupants.add(occupantId);
-
+    this.pendingOccupants.delete(occupantId);
+    
     if (this.occupants[occupantId]) {
       // Close the subscriber peer connection. Which also detaches the plugin handle.
-      if (this.occupants[occupantId]) {
-        this.occupants[occupantId].conn.close();
-        delete this.occupants[occupantId];
-      }
-
-      if (this.mediaStreams[occupantId]) {
-        delete this.mediaStreams[occupantId];
-      }
-
-      if (this.pendingMediaRequests.has(occupantId)) {
-        const msg = "The user disconnected before the media stream was resolved.";
-        this.pendingMediaRequests.get(occupantId).audio.reject(msg);
-        this.pendingMediaRequests.get(occupantId).video.reject(msg);
-        this.pendingMediaRequests.delete(occupantId);
-      }
-
-      // Call the Networked AFrame callbacks for the removed occupant.
-      this.onOccupantDisconnected(occupantId);
-      this.onOccupantsChanged(this.occupants);
+      this.occupants[occupantId].conn.close();
+      delete this.occupants[occupantId];
+      
+      this.occupantIds.splice(this.occupantIds.indexOf(occupantId), 1);
     }
+
+    if (this.mediaStreams[occupantId]) {
+      delete this.mediaStreams[occupantId];
+    }
+
+    if (this.pendingMediaRequests.has(occupantId)) {
+      const msg = "The user disconnected before the media stream was resolved.";
+      this.pendingMediaRequests.get(occupantId).audio.reject(msg);
+      this.pendingMediaRequests.get(occupantId).video.reject(msg);
+      this.pendingMediaRequests.delete(occupantId);
+    }
+
+    // Call the Networked AFrame callbacks for the removed occupant.
+    this.onOccupantDisconnected(occupantId);
   }
 
   associate(conn, handle) {
@@ -456,8 +512,10 @@ class JanusAdapter {
     handle.on("event", ev => {
       var data = ev.plugindata.data;
       if (data.event == "join" && data.room_id == this.room) {
-        this.addOccupant(data.user_id);
+        this.addAvailableOccupant(data.user_id);
+        this.syncOccupants();
       } else if (data.event == "leave" && data.room_id == this.room) {
+        this.removeAvailableOccupant(data.user_id);
         this.removeOccupant(data.user_id);
       } else if (data.event == "blocked") {
         document.body.dispatchEvent(new CustomEvent("blocked", { detail: { clientId: data.by } }));
@@ -538,7 +596,7 @@ class JanusAdapter {
   }
 
   async createSubscriber(occupantId) {
-    if (this.leftOccupants.has(occupantId)) {
+    if (this.availableOccupants.indexOf(occupantId) === -1) {
       console.warn(occupantId + ": cancelled occupant connection, occupant left before subscription negotation.");
       return null;
     }
@@ -553,7 +611,7 @@ class JanusAdapter {
 
     debug(occupantId + ": sub waiting for join");
 
-    if (this.leftOccupants.has(occupantId)) {
+    if (this.availableOccupants.indexOf(occupantId) === -1) {
       conn.close();
       console.warn(occupantId + ": cancelled occupant connection, occupant left after attach");
       return null;
@@ -563,7 +621,7 @@ class JanusAdapter {
 
     const webrtcup = new Promise(resolve => {
       const leftInterval = setInterval(() => {
-        if (this.leftOccupants.has(occupantId)) {
+        if (this.availableOccupants.indexOf(occupantId) === -1) {
           clearInterval(leftInterval);
           resolve();
         }
@@ -586,7 +644,7 @@ class JanusAdapter {
     // Janus should send us an offer for this occupant's media in response to this.
     const resp = await this.sendJoin(handle, { media: occupantId });
 
-    if (this.leftOccupants.has(occupantId)) {
+    if (this.availableOccupants.indexOf(occupantId) === -1) {
       conn.close();
       console.warn(occupantId + ": cancelled occupant connection, occupant left after join");
       return null;
@@ -595,7 +653,7 @@ class JanusAdapter {
     debug(occupantId + ": sub waiting for webrtcup");
     await webrtcup;
 
-    if (this.leftOccupants.has(occupantId)) {
+    if (this.availableOccupants.indexOf(occupantId) === -1) {
       conn.close();
       console.warn(occupantId + ": cancel occupant connection, occupant left during or after webrtcup");
       return null;
@@ -846,6 +904,9 @@ class JanusAdapter {
 
         this.pendingMediaRequests.get(clientId).audio.promise = audioPromise;
         this.pendingMediaRequests.get(clientId).video.promise = videoPromise;
+
+        audioPromise.catch(e => console.warn(`${clientId} getMediaStream Audio Error`, e));
+        videoPromise.catch(e => console.warn(`${clientId} getMediaStream Video Error`, e));
       }
       return this.pendingMediaRequests.get(clientId)[type].promise;
     }
@@ -855,9 +916,19 @@ class JanusAdapter {
     // Safari doesn't like it when you use single a mixed media stream where one of the tracks is inactive, so we
     // split the tracks into two streams.
     const audioStream = new MediaStream();
+    try {
     stream.getAudioTracks().forEach(track => audioStream.addTrack(track));
+
+    } catch(e) {
+      console.warn(`${clientId} setMediaStream Audio Error`, e);
+    }
     const videoStream = new MediaStream();
+    try {
     stream.getVideoTracks().forEach(track => videoStream.addTrack(track));
+
+    } catch (e) {
+      console.warn(`${clientId} setMediaStream Video Error`, e);
+    }
 
     this.mediaStreams[clientId] = { audio: audioStream, video: videoStream };
 
