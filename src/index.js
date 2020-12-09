@@ -230,6 +230,14 @@ class JanusAdapter {
       this.ws.close();
       this.ws = null;
     }
+
+    // Now that all RTCPeerConnection closed, be sure to not call
+    // reconnect() again via performDelayedReconnect if previous
+    // RTCPeerConnection was in the failed state.
+    if (this.delayedReconnectTimeout) {
+      clearTimeout(this.delayedReconnectTimeout);
+      this.delayedReconnectTimeout = null;
+    }
   }
 
   isDisconnected() {
@@ -263,6 +271,7 @@ class JanusAdapter {
       return;
     }
 
+    console.warn("Janus websocket closed unexpectedly.");
     if (this.onReconnecting) {
       this.onReconnecting(this.reconnectionDelay);
     }
