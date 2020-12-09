@@ -263,6 +263,7 @@ class JanusAdapter {
       return;
     }
 
+    console.warn("Janus websocket closed unexpectedly.");
     if (this.onReconnecting) {
       this.onReconnecting(this.reconnectionDelay);
     }
@@ -426,6 +427,17 @@ class JanusAdapter {
     conn.addEventListener("iceconnectionstatechange", ev => {
       if (conn.iceConnectionState === "failed") {
         console.warn("ICE failure detected. Reconnecting in 10s.");
+        this.performDelayedReconnect();
+      }
+      if (conn.iceConnectionState === "disconnected") {
+        // This can happen on Chrome when the Wi-Fi is cut temporarily (off and back on just a second).
+        // Chrome and Firefox behave very differently here.
+        // Chrome goes into disconnected state and the janus ws raises
+        // Uncaught (in promise) Error: Signalling transaction with txid 32
+        // timed out. at minijanus.js:193
+        // Firefox doesn't trigger the disconnected state but the ws closes so triggering
+        // the reconnection process too.
+        console.warn("ICE disconnected detected. Reconnecting in 10s.");
         this.performDelayedReconnect();
       }
     })
