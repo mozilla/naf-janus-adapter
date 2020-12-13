@@ -182,24 +182,17 @@ class JanusAdapter {
 
       this.session = new mj.JanusSession(this.ws.send.bind(this.ws), { timeoutMs: 30000 });
 
-      let onOpen;
-
-      const onError = () => {
-        reject(error);
-      };
-
       this.ws.addEventListener("close", this.onWebsocketClose);
       this.ws.addEventListener("message", this.onWebsocketMessage);
 
-      onOpen = () => {
-        this.ws.removeEventListener("open", onOpen);
-        this.ws.removeEventListener("error", onError);
+      this.wsOnOpen = () => {
+        this.ws.removeEventListener("open", this.wsOnOpen);
         this.onWebsocketOpen()
           .then(resolve)
           .catch(reject);
       };
 
-      this.ws.addEventListener("open", onOpen);
+      this.ws.addEventListener("open", this.wsOnOpen);
     });
 
     return Promise.all([websocketConnection, this.updateTimeOffset()]);
@@ -224,7 +217,7 @@ class JanusAdapter {
     }
 
     if (this.ws) {
-      this.ws.removeEventListener("open", this.onWebsocketOpen);
+      this.ws.removeEventListener("open", this.wsOnOpen);
       this.ws.removeEventListener("close", this.onWebsocketClose);
       this.ws.removeEventListener("message", this.onWebsocketMessage);
       this.ws.close();
