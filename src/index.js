@@ -525,6 +525,10 @@ class JanusAdapter {
     handle.on("event", ev => {
       var data = ev.plugindata.data;
       if (data.event == "join" && data.room_id == this.room) {
+        if (this.delayedReconnectTimeout) {
+          // Don't create a new RTCPeerConnection, all RTCPeerConnection will be closed in less than 10s.
+          return;
+        }
         this.addAvailableOccupant(data.user_id);
         this.syncOccupants();
       } else if (data.event == "leave" && data.room_id == this.room) {
