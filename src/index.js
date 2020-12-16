@@ -1,4 +1,16 @@
 var mj = require("minijanus");
+mj.JanusSession.prototype.sendOriginal = mj.JanusSession.prototype.send;
+mj.JanusSession.prototype.send = function(type, signal) {
+  return this.sendOriginal(type, signal).catch((e) => {
+    if (e.message && e.message.indexOf("timed out") > -1) {
+      console.error("web socket timed out");
+      NAF.connection.adapter.reconnect();
+    } else {
+      throw(e);
+    }
+  });
+}
+
 var sdpUtils = require("sdp");
 var debug = require("debug")("naf-janus-adapter:debug");
 var warn = require("debug")("naf-janus-adapter:warn");
