@@ -192,7 +192,7 @@ class JanusAdapter {
     const websocketConnection = new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.serverUrl, "janus-protocol");
 
-      this.session = new mj.JanusSession(this.ws.send.bind(this.ws), { timeoutMs: 30000 });
+      this.session = new mj.JanusSession(this.ws.send.bind(this.ws), { timeoutMs: 40000 });
 
       this.ws.addEventListener("close", this.onWebsocketClose);
       this.ws.addEventListener("message", this.onWebsocketMessage);
