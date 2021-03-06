@@ -17,22 +17,25 @@ naf-janus-adapter should support anything that supports recent WebRTC standards 
 ```html
 <html>
 <head>
-  <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
-  <script src="https://aframe.io/releases/0.7.0/aframe.min.js"></script>
-  <script src="https://rawgit.com/netpro2k/networked-aframe/feature/register-adapter/dist/networked-aframe.js"></script>
-  <script src="https://unpkg.com/naf-janus-adapter/dist/naf-janus-adapter.min.js"></script>
+  <script src="https://webrtc.github.io/adapter/adapter-latest.js" crossorigin="anonymous"></script>
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/gh/networked-aframe/networked-aframe@master/dist/networked-aframe.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/gh/Synantoo/naf-janus-adapter@master/dist/naf-janus-adapter.min.js"></script>
 </head>
 <body>
    <a-scene networked-scene="
         room: 1;
-        audio: true;
         adapter: janus;
-        serverURL: ws://localhost:8080;
+        serverURL: wss://preprod-janus.example.com/janus;
       ">
   </a-scene>
 </body>
 </html>
 ```
+
+Compared to other adapters like easyrtc, the janus adapter has specific API,
+you need to call `NAF.connection.adapter.setClientId` and
+`NAF.connection.adapter.setLocalMediaStream`, see the [example](examples/index.html).
 
 ## Migrating to 4.0.0
 
