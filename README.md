@@ -35,9 +35,31 @@ naf-janus-adapter should support anything that supports recent WebRTC standards 
 </html>
 ```
 
-Compared to other adapters like easyrtc, the janus adapter has specific API,
+Compared to other adapters like easyrtc, the janus adapter has a specific API,
 you need to call `NAF.connection.adapter.setClientId` and
 `NAF.connection.adapter.setLocalMediaStream`, see the [example](examples/index.html).
+
+The `audio:false` on the `networked-scene` is not supported by this adapter.
+If you want to mute the mic, you need to use
+`NAF.connection.adapter.enableMicrophone(false)`
+
+A specific behavior of the janus adapter is that `connect()` returns a
+Promise (it's not the case with the easyrtc adapter).
+The Promise returns when all peer connections to the participants are
+established. So you can use this:
+
+```js
+AFRAME.scenes[0].components["networked-scene"].connect().then(() => {
+  // do something
+});
+```
+
+`getMediaStream` supports a second parameter to get the video stream instead of
+the default "audio" stream. To get the video stream of a participant:
+
+```js
+const stream = await NAF.connection.adapter.getMediaStream(clientId, "video")
+```
 
 ## Migrating to 4.0.0
 
