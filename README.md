@@ -4,6 +4,8 @@
 
 Network adapter for [networked-aframe](https://github.com/haydenjameslee/networked-aframe) that uses the Janus WebRTC server as a backend.
 
+/!\ /!\ /!\ If you don't use an external backend like Phoenix Presence, please use the [3.0.x branch](https://github.com/Synantoo/naf-janus-adapter/tree/3.0.x).
+
 ## Usage
 
 naf-janus-adapter needs access to networked-aframe's `NAF` global variable. Include it **after** including networked-aframe but **before** the `networked-scene` is loaded.
