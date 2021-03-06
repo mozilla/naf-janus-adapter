@@ -118,16 +118,21 @@
     }
 
     // Prompt for audio.
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      const clientId = genClientId(); // generate a random 16 characters string, but you can use a uuid4 for example
-      NAF.connection.adapter.setClientId(clientId);
-      NAF.connection.adapter.setLocalMediaStream(stream).then(() => {
-        // Note that networked-scene audio:true option has no effect with the janus adapter
-        NAF.connection.adapter.enableMicrophone(true); // set it to false if you want to be muted initially.
+    document.addEventListener('DOMContentLoaded', () => {
+      const scene = document.querySelector('a-scene');
+      scene.addEventListener('adapter-ready', ({ detail: adapter }) => {
+        const clientId = genClientId(); // generate a random 16 characters string, but you can use a uuid4 for example
+        adapter.setClientId(clientId);
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+          adapter.setLocalMediaStream(stream).then(() => {
+            // Note that networked-scene audio:true option has no effect with the janus adapter
+            adapter.enableMicrophone(true); // set it to false if you want to be muted initially.
+          });
+        }).catch(err => {
+          console.warn("Microphone access not allowed. This client will not broadcast audio.");
+        });
       });
-    }).catch(err => {
-      console.warn("Microphone access not allowed. This client will not broadcast audio.");
-    })
+    });
   </script>
 
   <script>
