@@ -5,23 +5,22 @@
   <title>Dev Example — naf-janus-adapter</title>
   <meta name="description" content="Dev Example — naf-janus-adapter">
 
-  <script src="https://aframe.io/releases/0.8.2/aframe.min.js"></script>
-  <script src="https://rawgit.com/MozillaReality/networked-aframe/mr-social-client/master/dist/networked-aframe.js"></script>
-  <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/gh/networked-aframe/networked-aframe@master/dist/networked-aframe.min.js" crossorigin="anonymous"></script>
+  <script src="https://webrtc.github.io/adapter/adapter-latest.js" crossorigin="anonymous"></script>
   <script src="/dist/naf-janus-adapter.js"></script>
 
-  <script src="https://unpkg.com/aframe-randomizer-components@^3.0.1/dist/aframe-randomizer-components.min.js"></script>
-  <script src="https://unpkg.com/aframe-particle-system-component@1.0.5/dist/aframe-particle-system-component.min.js"></script>
+  <script src="https://unpkg.com/aframe-randomizer-components@^3.0.1/dist/aframe-randomizer-components.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/aframe-particle-system-component@1.0.5/dist/aframe-particle-system-component.min.js" crossorigin="anonymous"></script>
 </head>
 
 <body>
   <a-scene networked-scene="
         room: 1;
-        audio: true;
         debug: true;
         adapter: janus;
         connectOnLoad: true;
-        serverURL: wss://prod-janus.reticulum.io;
+        serverURL: wss://preprod-janus.example.com/janus;
       ">
     <a-assets>
 
@@ -103,6 +102,14 @@
   </style>
 
   <script>
+    function genClientId() {
+      let num = '';
+      for (let i = 0; i < 16; i++) {
+        num += Math.floor(Math.random() * 10).toString();
+      }
+      return num;
+    }
+
     // On mobile remove elements that are resource heavy
     var isMobile = AFRAME.utils.device.isMobile();
     if (isMobile) {
@@ -112,7 +119,12 @@
 
     // Prompt for audio.
     navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      NAF.connection.adapter.setLocalMediaStream(stream);
+      const clientId = genClientId(); // generate a random 16 characters string, but you can use a uuid4 for example
+      NAF.connection.adapter.setClientId(clientId);
+      NAF.connection.adapter.setLocalMediaStream(stream).then(() => {
+        // Note that networked-scene audio:true option has no effect with the janus adapter
+        NAF.connection.adapter.enableMicrophone(true); // set it to false if you want to be muted initially.
+      });
     }).catch(err => {
       console.warn("Microphone access not allowed. This client will not broadcast audio.");
     })
