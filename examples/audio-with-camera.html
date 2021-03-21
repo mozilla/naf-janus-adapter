@@ -2,8 +2,8 @@
 
 <head>
   <meta charset="utf-8">
-  <title>Audio Example — naf-janus-adapter</title>
-  <meta name="description" content="Audio Example — naf-janus-adapter">
+  <title>Audio With Camera Example — naf-janus-adapter</title>
+  <meta name="description" content="Audio With Camera Example — naf-janus-adapter">
 
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/gh/networked-aframe/networked-aframe@master/dist/networked-aframe.min.js" crossorigin="anonymous"></script>
@@ -32,6 +32,7 @@
       <!-- Avatar -->
       <template id="avatar-template" type="text/html">
         <a-entity class="avatar" networked-audio-source>
+          <a-plane color="#fff" width="4" height="3" position="0 .6 0" material="side: back" networked-video-source></a-plane>
           <a-sphere class="head" color="#5985ff" scale="0.45 0.5 0.4"></a-sphere>
           <a-entity class="face" position="0 0.05 0">
             <a-sphere class="eye" color="#efefef" position="0.16 0.1 -0.35" scale="0.12 0.12 0.12">
@@ -127,6 +128,15 @@
           adapter.setLocalMediaStream(stream).then(() => {
             // Note that networked-scene audio:true option has no effect with the janus adapter
             adapter.enableMicrophone(true); // set it to false if you want to be muted initially.
+            const currentStream = stream;
+            navigator.mediaDevices.getUserMedia(
+              { video: { mediaSource: "camera",
+                         width: { max: 1280, ideal: 640 },
+                         height: { ideal: 360 },
+                         frameRate: 30}}).then((stream) => {
+              currentStream.addTrack(stream.getVideoTracks()[0]);
+              adapter.setLocalMediaStream(currentStream);
+            });
           });
         }).catch(err => {
           console.warn("Microphone access not allowed. This client will not broadcast audio.");

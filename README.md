@@ -37,7 +37,8 @@ naf-janus-adapter should support anything that supports recent WebRTC standards 
 
 Compared to other adapters like easyrtc, the janus adapter has a specific API,
 you need to call `NAF.connection.adapter.setClientId` and
-`NAF.connection.adapter.setLocalMediaStream`, see the [example](examples/index.html).
+`NAF.connection.adapter.setLocalMediaStream`, see the [Audio example](examples/index.html)
+and the [Audio with Camera example](examples/audio-with-camera.html).
 
 The `audio:false` on the `networked-scene` is not supported by this adapter.
 If you want to mute the mic, you need to use
