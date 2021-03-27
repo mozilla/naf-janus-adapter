@@ -12,7 +12,7 @@ naf-janus-adapter needs access to networked-aframe's `NAF` global variable. Incl
 
 ## Compatibility
 
-naf-janus-adapter should support anything that supports recent WebRTC standards (right now, the `RTPSender`-based APIs for manipulating streams and tracks). At the time of this writing, that means that many browsers (e.g. Chrome) will require the use of the [WebRTC adapter shim](https://github.com/webrtc/adapter). If you're using NPM to build your A-Frame application, you should include [webrtc-adapter](https://www.npmjs.com/package/webrtc-adapter) as a dependency of your application; if you're using the [browser distribution](https://github.com/mozilla/naf-janus-adapter/tree/master/dist), you should include the WebRTC adapter prior to including naf-janus-adapter, as shown in the example code below.
+naf-janus-adapter should support anything that supports recent WebRTC standards (right now, the `RTPSender`-based APIs for manipulating streams and tracks). At the time of this writing, that means that many browsers (e.g. Chrome) will require the use of the [WebRTC adapter shim](https://github.com/webrtc/adapter). If you're using NPM to build your A-Frame application, you should include [webrtc-adapter](https://www.npmjs.com/package/webrtc-adapter) as a dependency of your application; if you're using the [browser distribution](https://github.com/networked-aframe/naf-janus-adapter/tree/master/dist), you should include the WebRTC adapter prior to including naf-janus-adapter, as shown in the example code below.
 
 ### Example
 
