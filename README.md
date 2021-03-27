@@ -4,7 +4,7 @@
 
 Network adapter for [networked-aframe](https://github.com/networked-aframe/networked-aframe) that uses the Janus WebRTC server as a backend.
 
-/!\ /!\ /!\ If you don't use an external backend like Phoenix Presence, please use the [3.0.x branch](https://github.com/Synantoo/naf-janus-adapter/tree/3.0.x).
+/!\ /!\ /!\ If you don't use an external backend like Phoenix Presence, please use the [3.0.x branch](https://github.com/networked-aframe/naf-janus-adapter/tree/3.0.x).
 
 ## Usage
 
@@ -22,7 +22,7 @@ naf-janus-adapter should support anything that supports recent WebRTC standards 
   <script src="https://webrtc.github.io/adapter/adapter-latest.js" crossorigin="anonymous"></script>
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/gh/networked-aframe/networked-aframe@master/dist/networked-aframe.min.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/gh/Synantoo/naf-janus-adapter@master/dist/naf-janus-adapter.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/networked-aframe/naf-janus-adapter@master/dist/naf-janus-adapter.min.js"></script>
 </head>
 <body>
    <a-scene networked-scene="
