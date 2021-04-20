@@ -561,6 +561,14 @@ class JanusAdapter {
     if (!message.plugindata.data.success) {
       const err = message.plugindata.data.error;
       console.error(err);
+      // We may get here because of an expired JWT.
+      // Close the connection ourself otherwise janus will close it after
+      // session_timeout because we didn't send any keepalive and this will
+      // trigger a delayed reconnect because of the iceconnectionstatechange
+      // listener for failure state.
+      // Even if the app code calls disconnect in case of error, disconnect
+      // won't close the peer connection because this.publisher is not set.
+      conn.close();
       throw err;
     }
 
