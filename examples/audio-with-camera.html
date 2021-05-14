@@ -122,6 +122,8 @@
     document.addEventListener('DOMContentLoaded', () => {
       const scene = document.querySelector('a-scene');
       scene.addEventListener('adapter-ready', ({ detail: adapter }) => {
+        // We don't use the syncOccupants API, set requestedOccupants to be the same array instance as availableOccupants
+        adapter.requestedOccupants = adapter.availableOccupants;
         const clientId = genClientId(); // generate a random 16 characters string, but you can use a uuid4 for example
         adapter.setClientId(clientId);
         navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {

@@ -69,9 +69,19 @@ const stream = await NAF.connection.adapter.getMediaStream(clientId, "video")
 NAF.connection.adapter.syncOccupants(arrayOfOccupantIds);
 ```
 
-If you want to automatically subscribe to occupants on join, you may call `syncOccupants` with the `availableOccupants` array as the first arugument once.
+If you want to automatically subscribe to occupants on join, you may call `syncOccupants` with the `availableOccupants` array as the first argument once in the `onConnect` function.
 ```js
 NAF.connection.adapter.syncOccupants(NAF.connection.adapter.availableOccupants);
+```
+
+or set `requestedOccupants` to be the same array instance as `availableOccupants` in the `adapter-ready` event listener if this is more convenient for you:
+
+```js
+scene.addEventListener('adapter-ready', ({ detail: adapter }) => {
+  // We don't use the syncOccupants API, set requestedOccupants to be the same array instance as availableOccupants
+  adapter.requestedOccupants = adapter.availableOccupants;
+  ...
+});
 ```
 
 ## Development
