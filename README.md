@@ -87,3 +87,7 @@ scene.addEventListener('adapter-ready', ({ detail: adapter }) => {
 - Dev: `npm run start`
 - Build: `npm run build`
 - Release: `npm run release`
+
+## Janus SFU deployment
+
+[how to deploy janus with the janus sfu plugin on Ubuntu 20.04](docs/janus-deployment.md)
