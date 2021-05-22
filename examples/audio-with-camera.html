@@ -71,6 +71,21 @@
     </svg>
   </a>
   <style>
+    .actions {
+      position: absolute;
+      display: flex;
+      bottom: 3%;
+      left: 3%;
+    }
+
+    .button {
+      cursor: pointer;
+      background: #fff;
+      height: 40px;
+      width: 130px;
+      border-radius: 30px;
+    }
+
     .github-corner:hover .octo-arm {
       animation: octocat-wave 560ms ease-in-out
     }
@@ -100,6 +115,11 @@
     }
   </style>
 
+  <div class="actions">
+    <button id="camera-btn" type="button" class="button">Show Camera</button>
+    <button id="scene-btn" type="button" class="button">Start streaming scene</button>
+  </div>
+
   <script>
     function genClientId() {
       let num = '';
@@ -109,9 +129,71 @@
       return num;
     }
 
+    const state = {};
+    state.currentStream = null;
+    state.cameraEnabled = false;
+    state.sceneStreamingEnabled = false;
+
     // Prompt for audio.
     document.addEventListener('DOMContentLoaded', () => {
       const scene = document.querySelector('a-scene');
+      const cameraBtnEl = document.getElementById('camera-btn');
+      const sceneBtnEl = document.getElementById('scene-btn');
+
+      const stopAndRemoveVideoTrack = async () => {
+        const videoTracks = state.currentStream.getVideoTracks();
+        if (videoTracks.length > 0) {
+          videoTracks[0].stop();
+          state.currentStream.removeTrack(videoTracks[0]);
+          await NAF.connection.adapter.setLocalMediaStream(state.currentStream);
+        }
+      };
+
+      // Handle camera button click (Show and Hide)
+      cameraBtnEl.addEventListener('click', async () => {
+        if (state.sceneStreamingEnabled) {
+          await stopAndRemoveVideoTrack();
+          state.sceneStreamingEnabled = false;
+          sceneBtnEl.textContent = 'Start streaming scene';
+        }
+
+        if (state.cameraEnabled) {
+          await stopAndRemoveVideoTrack();
+        } else {
+          const stream = await navigator.mediaDevices.getUserMedia(
+            {video: {mediaSource: "camera",
+                     width: {max: 1280, ideal: 640},
+                     height: {ideal: 360},
+                     frameRate: 30}});
+          state.currentStream.addTrack(stream.getVideoTracks()[0]);
+          await NAF.connection.adapter.setLocalMediaStream(state.currentStream);
+        }
+
+        state.cameraEnabled = !state.cameraEnabled;
+        cameraBtnEl.textContent = state.cameraEnabled ? 'Hide Camera' : 'Show Camera';
+      });
+
+      // Handle scene streaming button click (Start and Stop)
+      sceneBtnEl.addEventListener('click', async () => {
+        if (state.cameraEnabled) {
+          await stopAndRemoveVideoTrack();
+          state.cameraEnabled = false;
+          cameraBtnEl.textContent = 'Show Camera';
+        }
+
+        if (state.sceneStreamingEnabled) {
+          await stopAndRemoveVideoTrack();
+        } else {
+          const stream = scene.canvas.captureStream(30);
+          state.currentStream.addTrack(stream.getVideoTracks()[0]);
+          await NAF.connection.adapter.setLocalMediaStream(state.currentStream);
+        }
+
+        state.sceneStreamingEnabled = !state.sceneStreamingEnabled;
+        sceneBtnEl.textContent = state.sceneStreamingEnabled ? 'Stop streaming scene' : 'Start streaming scene';
+      });
+
+
       scene.addEventListener('adapter-ready', ({ detail: adapter }) => {
         // We don't use the syncOccupants API, set requestedOccupants to be the same array instance as availableOccupants
         adapter.requestedOccupants = adapter.availableOccupants;
@@ -121,15 +203,8 @@
           adapter.setLocalMediaStream(stream).then(() => {
             // Note that networked-scene audio:true option has no effect with the janus adapter
             adapter.enableMicrophone(true); // set it to false if you want to be muted initially.
-            const currentStream = stream;
-            navigator.mediaDevices.getUserMedia(
-              { video: { mediaSource: "camera",
-                         width: { max: 1280, ideal: 640 },
-                         height: { ideal: 360 },
-                         frameRate: 30}}).then((stream) => {
-              currentStream.addTrack(stream.getVideoTracks()[0]);
-              adapter.setLocalMediaStream(currentStream);
-            });
+            state.currentStream = stream;
+            adapter.setLocalMediaStream(stream);
           });
         }).catch(err => {
           console.warn("Microphone access not allowed. This client will not broadcast audio.");
