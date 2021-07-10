@@ -531,14 +531,21 @@ class JanusAdapter {
     // Handle all of the join and leave events.
     handle.on("event", ev => {
       var data = ev.plugindata.data;
-      if (data.event == "join" && data.room_id == this.room) {
+      if (data.event == "join" && this.room.split('-').indexOf(data.room_id) > -1) {
         if (this.delayedReconnectTimeout) {
           // Don't create a new RTCPeerConnection, all RTCPeerConnection will be closed in less than 10s.
           return;
         }
-        this.addAvailableOccupant(data.user_id);
-        this.syncOccupants();
-      } else if (data.event == "leave" && data.room_id == this.room) {
+        if (data.room_id == this.room.split('-')[0]) {
+          this.addAvailableOccupant(data.user_id);
+          this.syncOccupants();
+	} else {
+          // Instead of opening a WebRTC connection and have the dataChannelOpen function called,
+          // we call completeSync to send the entities to the new user
+          // but we need to send again to all users (null), sending to data.user_id doesn't work here.
+	  NAF.entities.completeSync(null, true);
+	}
+      } else if (data.event == "leave" && this.room.split('-').indexOf(data.room_id) > -1) {
         this.removeAvailableOccupant(data.user_id);
         this.removeOccupant(data.user_id);
       } else if (data.event == "blocked") {
@@ -572,7 +579,7 @@ class JanusAdapter {
       throw err;
     }
 
-    var initialOccupants = message.plugindata.data.response.users[this.room] || [];
+    var initialOccupants = message.plugindata.data.response.users[this.room.split('-')[0]] || [];
 
     if (initialOccupants.includes(this.clientId)) {
       console.warn("Janus still has previous session for this client. Reconnecting in 10s.");
