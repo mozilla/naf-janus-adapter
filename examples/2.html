@@ -15,7 +15,7 @@
 
 <body>
   <a-scene networked-scene="
-        room: 1;
+        room: 2;
         debug: true;
         adapter: janus;
         connectOnLoad: true;
@@ -112,6 +112,8 @@
     document.addEventListener('DOMContentLoaded', () => {
       const scene = document.querySelector('a-scene');
       scene.addEventListener('adapter-ready', ({ detail: adapter }) => {
+        adapter.unreliableTransport = "websocket";
+        adapter.reliableTransport = "websocket";
         // We don't use the syncOccupants API, set requestedOccupants to be the same array instance as availableOccupants
         adapter.requestedOccupants = adapter.availableOccupants;
         const clientId = genClientId(); // generate a random 16 characters string, but you can use a uuid4 for example
