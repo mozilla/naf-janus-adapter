@@ -4,6 +4,8 @@
 
 Network adapter for [networked-aframe](https://github.com/haydenjameslee/networked-aframe) that uses the Janus WebRTC server as a backend.
 
+This adapter was designed for [Mozilla Hubs](https://github.com/mozilla/hubs) but Hubs no longer uses it. A [community fork](https://github.com/networked-aframe/naf-janus-adapter) with updated documentation is available in the networked-aframe organization.
+
 ## Usage
 
 naf-janus-adapter needs access to networked-aframe's `NAF` global variable. Include it **after** including networked-aframe but **before** the `networked-scene` is loaded.
